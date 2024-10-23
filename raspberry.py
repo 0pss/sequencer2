@@ -29,10 +29,31 @@ def get_git_commit_hash():
         return f"Error retrieving Git commit hash: {e}"
 
 if __name__ == "__main__":
-    print(f"Current Git commit hash: {get_git_commit_hash()}")
+    print(f"Running commit: {get_git_commit_hash()}")
 
 
 if is_raspberry_pi():
     print("Running on a Raspberry Pi.")
+
+    import time
+    import board
+    import busio
+    import adafruit_mpr121
+
+    # Initialize I2C bus and MPR121
+    i2c = busio.I2C(board.SCL, board.SDA)
+    mpr121 = adafruit_mpr121.MPR121(i2c)
+
+    print("Touch sensor test. Press Ctrl-C to quit.")
+
+    # Main loop to print touch status
+    while True:
+        for i in range(12):
+            if mpr121[i].value:
+                print(f"Input {i} is touched.")
+        time.sleep(0.1)
+
+
+
 else:
     print("Not running on a Raspberry Pi.")
