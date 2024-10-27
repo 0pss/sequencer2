@@ -1,2 +1,4 @@
 adafruit-blinka
 adafruit-circuitpython-mpr121
+numpy
+simpleaudio
