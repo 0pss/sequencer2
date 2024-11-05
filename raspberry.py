@@ -67,7 +67,7 @@ class I2CController:
                 touch2 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
                 self.current_bpm = data[4]
 
-                print("recieved: ", data)
+                print("recieved: ", touch1, touch2, data[4])
                 
                 # Initialize grid
                 grid = [[0 for _ in range(20)] for _ in range(4)]
