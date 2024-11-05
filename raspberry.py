@@ -153,7 +153,7 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
                     # Send new state to Arduino
                     i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
         
-        time.sleep(0.01)  # Small delay to prevent overwhelming the I2C bus
+        time.sleep(0.05)  # Small delay to prevent overwhelming the I2C bus
 
 
 class PIDController:
