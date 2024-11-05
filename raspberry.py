@@ -110,7 +110,8 @@ class I2CController:
         try:
             with self._lock:
                 # Pack track and position into single byte
-                data = (track << 6) | (position & 0x3F)
+                data = (position & 0x3F)
+                print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
         except Exception as e:
             print(f"I2C write error (position): {e}")
@@ -126,6 +127,7 @@ class I2CController:
             with self._lock:
                 # Pack track and position into single byte
                 data = (track << 6) | (position & 0x3F)
+                print("sending sample state:", [data, 1 if active else 0] )
                 self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
         except Exception as e:
             print(f"I2C write error (sample state): {e}")
