@@ -146,7 +146,7 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
     """
     Continuously update sequencer state based on touch input.
     """
-    while self.state:
+    while i2c.state:
         grid = i2c.read_touch_data()
         
         # Update sequencer state based on touch data
