@@ -194,19 +194,25 @@ class I2CController:
         self.touch_data = [0, 0]
         self.current_bpm = 120
         self._lock = threading.Lock()
-        # Add event for signaling when position update is needed
-        self.position_update_event = threading.Event()
+        # Queue for position updates that need to be sent
+        self.position_queue = queue.Queue()
+        # Flag to indicate if touch reading is in progress
+        self.is_reading_touch = threading.Event()
         
     def read_touch_data(self) -> List[List[int]]:
         """
         Read touch data from Arduino and convert to grid format.
-        Now checks if position update is pending before reading.
+        Uses event flag to indicate when reading is in progress.
         """
-        # Check if position update is pending and wait if necessary
-        if self.position_update_event.is_set():
-            return [[0 for _ in range(20)] for _ in range(4)]
-            
         try:
+            # Set flag to indicate touch reading is starting
+            self.is_reading_touch.set()
+            
+            # Check if there's a pending position update
+            if not self.position_queue.empty():
+                self.is_reading_touch.clear()
+                return [[0 for _ in range(20)] for _ in range(4)]
+                
             with self._lock:
                 # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
                 data = self.bus.read_i2c_block_data(self.address, 0, 5)
@@ -216,7 +222,7 @@ class I2CController:
                 touch1 = (data[3] << 8) | data[2]
                 self.current_bpm = data[4]
 
-                # Rest of the processing remains the same
+                # Process touch data
                 grid = [[0 for _ in range(20)] for _ in range(4)]
                 
                 bits1 = bin(touch1)[2:].zfill(12)
@@ -234,51 +240,42 @@ class I2CController:
         except Exception as e:
             print(f"I2C read error: {e}")
             return [[0 for _ in range(20)] for _ in range(4)]
+        finally:
+            # Clear flag to indicate touch reading is complete
+            self.is_reading_touch.clear()
     
     def send_position(self, position: int):
         """
         Send current sequencer position to Arduino for LED display.
-        Now uses event to pause touch reading.
+        Has highest priority and will interrupt touch reading if necessary.
         """
         try:
-            # Signal that position update is starting
-            self.position_update_event.set()
+            # Wait for very short time if touch reading is in progress
+            # but don't wait indefinitely
+            self.is_reading_touch.wait_for(lambda: not self.is_reading_touch.is_set(), timeout=0.001)
             
             with self._lock:
                 data = (position & 0x3F)
-                print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
                 
-            # Small delay to ensure position update completes
-            time.sleep(0.001)
-            
         except Exception as e:
             print(f"I2C write error (position): {e}")
-        finally:
-            # Clear the event to resume touch reading
-            self.position_update_event.clear()
     
     def send_sample_state(self, track: int, position: int, active: bool):
         """
         Send sample state to Arduino for LED display.
-        Now uses event to pause touch reading.
+        Lower priority than position updates.
         """
         try:
-            # Signal that position update is starting
-            self.position_update_event.set()
+            # Wait for touch reading to complete if in progress
+            self.is_reading_touch.wait_for(lambda: not self.is_reading_touch.is_set(), timeout=0.001)
             
             with self._lock:
                 data = (track << 6) | (position & 0x3F)
                 self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
                 
-            # Small delay to ensure sample state update completes
-            time.sleep(0.001)
-            
         except Exception as e:
             print(f"I2C write error (sample state): {e}")
-        finally:
-            # Clear the event to resume touch reading
-            self.position_update_event.clear()
 
     def get_bpm(self) -> int:
         return self.current_bpm
@@ -286,23 +283,38 @@ class I2CController:
 def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]], sequencer_changed: List[int]):
     """
     Continuously update sequencer state based on touch input.
-    Now includes rate limiting and checks for position updates.
+    Now includes adaptive rate limiting based on system load.
     """
+    last_successful_read = time.perf_counter()
+    min_interval = 0.01  # Minimum time between reads
+    
     while True:
-        # Only read if no position update is pending
-        if not i2c.position_update_event.is_set():
+        current_time = time.perf_counter()
+        
+        # Only read if minimum interval has passed and no position update is pending
+        if current_time - last_successful_read >= min_interval:
             grid = i2c.read_touch_data()
             
             # Update sequencer state based on touch data
+            changed = False
             for row in range(4):
                 for col in range(20):
                     if grid[row][col]:
                         sequencer_on[row][col] = 1 - sequencer_on[row][col]
                         sequencer_changed[col] = 1
-                        i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
+                        changed = True
+            
+            # Only send sample state updates if there were actual changes
+            if changed:
+                for row in range(4):
+                    for col in range(20):
+                        if sequencer_changed[col]:
+                            i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
+            
+            last_successful_read = current_time
         
-        # Reduced polling rate to prevent overwhelming the bus
-        time.sleep(0.1)  # Increased delay to give more time for position updates
+        # Adaptive sleep based on system load
+        time.sleep(0.001)  # Minimal sleep to prevent busy-waiting
 
 # Main loop with metronome and PID control
 def main_loop(i2c: I2CController):
