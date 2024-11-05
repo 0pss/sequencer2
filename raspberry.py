@@ -74,24 +74,18 @@ class I2CController:
                 
                 # Get active row(s) from second MPR121 (last 4 bits)
                 active_rows = []
-                for i in range(8, 12):  # Bits 8-11 represent rows
-                    if touch2 & (1 << i):
-                        active_rows.append(i - 8)
-                
-               # if not active_rows:  # If no row is active, no need to process columns
-                #    return grid
-                
-                # Process first MPR121 (first 12 columns)
-                for col in range(12):
-                    if touch1 & (1 << col):
-                        for row in active_rows:
-                            grid[row][col] = 1
-                
-                # Process second MPR121 (next 8 columns)
-                for col in range(8):  # First 8 bits of touch2 are columns
-                    if touch2 & (1 << col):
-                        for row in active_rows:
-                            grid[row][col + 12] = 1
+
+                #TODO: this can be cut short, by checking rows first
+
+                bits1 = bin(touch1)[2:]
+                bits2 = bin(touch2)[2:]
+
+                cols = bits1+bits2[0:7]
+                rows = bits2[7:]
+
+                for c in cols:
+                    if int(c) > 0:
+                        grid[1][c] = 1                       
 
                 print("====")
                 for row in grid:
