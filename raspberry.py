@@ -268,7 +268,7 @@ async def main_loop(i2c: AsyncI2CController):
     # Initialize variables
     bpm = 120
     delay = wait_time = 60/bpm
-    pid = AsyncPIDController(Kp=0.5, Ki=0.1, Kd=0.01)
+    pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
     
     SEQUENCER_GLOBAL_STEP = 0
     SEQUENCER_ON = [[0 for _ in range(20)] for _ in range(4)]
