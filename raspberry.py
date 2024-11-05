@@ -101,7 +101,7 @@ class I2CController:
             print(f"I2C read error: {e}")
             return [[0 for _ in range(20)] for _ in range(4)]
     
-    def send_position(self, track: int, position: int):
+    def send_position(self, position: int):
         """
         Send current sequencer position to Arduino for LED display.
         track: 0-3
@@ -340,8 +340,7 @@ def main_loop(i2c: I2CController):
             SEQUENCER_AUDIO[SEQUENCER_GLOBAL_STEP].play()
             
             # Send current position to Arduino
-            for track in range(4):
-                i2c.send_position(track, SEQUENCER_GLOBAL_STEP)
+            i2c.send_position(SEQUENCER_GLOBAL_STEP)
 
             # Update step
             SEQUENCER_GLOBAL_STEP = (SEQUENCER_GLOBAL_STEP + 1) % SEQUENCE_LENGTH
