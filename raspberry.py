@@ -152,10 +152,12 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
             for col in range(20):
                 if grid[row][col]:  # If position is touched
                     # Toggle the state
+                    print("here")
                     sequencer_on[row][col] = 1 - sequencer_on[row][col]
                     sequencer_changed[col] = 1
                     # Send new state to Arduino
                     i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
+                    print("there")
         
         time.sleep(0.05)  # Small delay to prevent overwhelming the I2C bus
         print(sequencer_on)
