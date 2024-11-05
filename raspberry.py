@@ -91,7 +91,6 @@ class I2CController:
 
                 # Fill grid based on cols value
                 for i, c in enumerate(cols):
-                    print("C:", c, i)
                     if int(c) > 0:
                         grid[0][i] = 1
 
@@ -159,6 +158,9 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
                     i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
         
         time.sleep(0.1)  # Small delay to prevent overwhelming the I2C bus
+        print(sequencer_on)
+        print("\n")
+        print(sequencer_changed)
 
 
 class PIDController:
