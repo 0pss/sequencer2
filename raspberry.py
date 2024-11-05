@@ -283,7 +283,7 @@ async def main_loop(i2c: AsyncI2CController):
         new_bpm = i2c.get_bpm()
         if new_bpm != bpm:
             bpm = new_bpm
-            delay = 60/bpm
+            delay = 60/120#bpm
             print(f'New BPM: {bpm}')
 
         current_time = perf_counter()
