@@ -9,32 +9,10 @@ import smbus2 as smbus
 import threading
 import time
 import numpy as np
-import sounddevice as sa
+import simpleaudio as sa
 import struct
 from typing import List, Tuple
 
-
-#### Global/Shared variables ######
-pressed_key = ""
-
-SEQUENCE_LENGTH = 16
-SEQUENCE_SAMPLES = 4
-
-BPM = 120
-
-STOPED = False
-
-# Load audio files
-#wave_obj = sa.WaveObject.from_wave_file("metronome.wav")  # Metronome sound
-
-SEQUENCER_ON = [[0 for _ in range(SEQUENCE_LENGTH)] for _ in range(SEQUENCE_SAMPLES)]
-RAW_SAMPLES = [0 for _ in range(SEQUENCE_SAMPLES)]
-SEQUENCER_AUDIO = [create_silent_wave() for _ in range(SEQUENCE_LENGTH)] 
-SEQUENCER_AUDIO_new = [create_silent_wave() for _ in range(SEQUENCE_LENGTH)] 
-
-SEQUENCER_GLOBAL_STEP = 0
-
-SEQUENCER_CHANGED = [0 for _ in range(SEQUENCE_LENGTH)] 
 
 
 
@@ -376,6 +354,33 @@ def main_loop(i2c: I2CController):
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
+
+
+
+
+#### Global/Shared variables ######
+pressed_key = ""
+
+SEQUENCE_LENGTH = 16
+SEQUENCE_SAMPLES = 4
+
+BPM = 120
+
+STOPED = False
+
+# Load audio files
+#wave_obj = sa.WaveObject.from_wave_file("metronome.wav")  # Metronome sound
+
+SEQUENCER_ON = [[0 for _ in range(SEQUENCE_LENGTH)] for _ in range(SEQUENCE_SAMPLES)]
+RAW_SAMPLES = [0 for _ in range(SEQUENCE_SAMPLES)]
+SEQUENCER_AUDIO = [create_silent_wave() for _ in range(SEQUENCE_LENGTH)] 
+SEQUENCER_AUDIO_new = [create_silent_wave() for _ in range(SEQUENCE_LENGTH)] 
+
+SEQUENCER_GLOBAL_STEP = 0
+
+SEQUENCER_CHANGED = [0 for _ in range(SEQUENCE_LENGTH)] 
+
+
 
 
 def main():
