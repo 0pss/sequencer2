@@ -71,25 +71,33 @@ class I2CController:
                 
                 # Initialize grid
                 grid = [[0 for _ in range(20)] for _ in range(4)]
-                
+
                 # Get active row(s) from second MPR121 (last 4 bits)
                 active_rows = []
 
-                #TODO: this can be cut short, by checking rows first
+                # TODO: this can be cut short, by checking rows first
 
-                bits1 = bin(touch1)[2:]
-                bits2 = bin(touch2)[2:]
+                # Convert touch1 and touch2 to binary strings with fixed length (assumed 12 bits each for example)
+                bits1 = bin(touch1)[2:].zfill(12)  # Pad to 12 bits
+                bits2 = bin(touch2)[2:].zfill(12)  # Pad to 12 bits
 
-                cols = bits1+bits2[0:7]
-                rows = bits2[7:]
+                print(bits1, "\n", bits2)
 
-                for c in cols:
+                # Extract columns and rows with fixed lengths
+                cols = bits1 + bits2[:7]  # Concatenate bits1 and first 7 bits of bits2
+                rows = bits2[8:]          # Last 4 bits of bits2
+
+                print("Rows:", rows, "\nCols:", cols)
+
+                # Fill grid based on cols value
+                for i, c in enumerate(cols):
+                    print("C:", c, i)
                     if int(c) > 0:
-                        grid[1][c] = 1                       
+                        grid[0][i] = 1
 
                 print("====")
                 for row in grid:
-                    print(row,"\n")
+                    print(row, "\n")
                 print("====")
                 
                 return grid
