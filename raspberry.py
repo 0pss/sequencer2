@@ -93,7 +93,10 @@ class I2CController:
                         for row in active_rows:
                             grid[row][col + 12] = 1
 
-                print(grid)
+                print("====")
+                for row in grid:
+                    print(row,"\n")
+                print("====")
                 
                 return grid
                 
