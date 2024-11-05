@@ -2,6 +2,7 @@ import os
 import platform
 import time
 import board
+import asyncio
 import busio
 import subprocess
 from typing import Tuple
@@ -39,7 +40,6 @@ def get_git_commit_hash() -> str:
         return commit_hash
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
-
 
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
@@ -116,9 +116,6 @@ def Wave2numpy(wave_obj):
     
     return numpy_array.reshape(-1, wave_obj.num_channels)
 
-
-
-
 def render():
     """ Render the audio for columns that have changed. """
     global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_ON
@@ -167,8 +164,7 @@ def render():
         
         # Add a small delay to prevent high CPU usage
         time.sleep(0.01)  # Sleep for 10 milliseconds to reduce CPU load
-
-                    
+                
 def load_n_samples(folder_path, n):
     wav_files = sorted([f for f in os.listdir(folder_path) if f.endswith('.wav')])[:n]
     samples = [sa.WaveObject.from_wave_file(os.path.join(folder_path, wav_file)) for wav_file in wav_files]
@@ -185,136 +181,87 @@ def load_n_samples(folder_path, n):
 
     return samples_out
 
-
-
-class I2CController:
+class AsyncI2CController:
     def __init__(self, address: int = 0x08):
         self.bus = smbus.SMBus(1)
         self.address = address
         self.touch_data = [0, 0]
         self.current_bpm = 120
-        self._lock = threading.Lock()
-        # Queue for position updates that need to be sent
-        self.position_queue = queue.Queue()
-        # Flag to indicate if touch reading is in progress
-        self.is_reading_touch = threading.Event()
+        self._lock = asyncio.Lock()
         
-    def read_touch_data(self) -> List[List[int]]:
+    async def read_touch_data(self) -> List[List[int]]:
         """
         Read touch data from Arduino and convert to grid format.
-        Uses event flag to indicate when reading is in progress.
+        Returns a 4x20 list where 1 indicates a touched position.
         """
         try:
-            # Set flag to indicate touch reading is starting
-            self.is_reading_touch.set()
-            
-            # Check if there's a pending position update
-            if not self.position_queue.empty():
-                self.is_reading_touch.clear()
-                return [[0 for _ in range(20)] for _ in range(4)]
-                
-            with self._lock:
+            async with self._lock:
                 # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
                 data = self.bus.read_i2c_block_data(self.address, 0, 5)
                 
-                # Extract touch data
                 touch2 = (data[1] << 8) | data[0]
                 touch1 = (data[3] << 8) | data[2]
                 self.current_bpm = data[4]
 
-                # Process touch data
                 grid = [[0 for _ in range(20)] for _ in range(4)]
-                
+
                 bits1 = bin(touch1)[2:].zfill(12)
                 bits2 = bin(touch2)[2:].zfill(12)
-                
+                print("received: ", bits1, bits2, data[4])
+
                 cols = bits1 + bits2[:7]
                 rows = bits2[8:]
 
                 for i, c in enumerate(cols):
                     if int(c) > 0:
                         grid[0][i] = 1
-                
+
                 return grid
                 
         except Exception as e:
             print(f"I2C read error: {e}")
             return [[0 for _ in range(20)] for _ in range(4)]
-        finally:
-            # Clear flag to indicate touch reading is complete
-            self.is_reading_touch.clear()
     
-    def send_position(self, position: int):
-        """
-        Send current sequencer position to Arduino for LED display.
-        Has highest priority and will interrupt touch reading if necessary.
-        """
+    async def send_position(self, position: int):
+        """Send current sequencer position to Arduino for LED display."""
         try:
-            # Wait for very short time if touch reading is in progress
-            # but don't wait indefinitely
-            self.is_reading_touch.wait_for(lambda: not self.is_reading_touch.is_set(), timeout=0.001)
-            
-            with self._lock:
+            async with self._lock:
                 data = (position & 0x3F)
+                print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
-                
         except Exception as e:
             print(f"I2C write error (position): {e}")
     
-    def send_sample_state(self, track: int, position: int, active: bool):
-        """
-        Send sample state to Arduino for LED display.
-        Lower priority than position updates.
-        """
+    async def send_sample_state(self, track: int, position: int, active: bool):
+        """Send sample state to Arduino for LED display."""
         try:
-            # Wait for touch reading to complete if in progress
-            self.is_reading_touch.wait_for(lambda: not self.is_reading_touch.is_set(), timeout=0.001)
-            
-            with self._lock:
+            async with self._lock:
                 data = (track << 6) | (position & 0x3F)
                 self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
-                
         except Exception as e:
             print(f"I2C write error (sample state): {e}")
 
     def get_bpm(self) -> int:
         return self.current_bpm
 
-def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]], sequencer_changed: List[int]):
-    """
-    Continuously update sequencer state based on touch input.
-    Now includes adaptive rate limiting based on system load.
-    """
-    last_successful_read = time.perf_counter()
-    min_interval = 0.01  # Minimum time between reads
-    
+async def update_sequencer_from_touch(i2c: AsyncI2CController, 
+                                    sequencer_on: List[List[int]], 
+                                    sequencer_changed: List[int]):
+    """Continuously update sequencer state based on touch input."""
     while True:
-        current_time = time.perf_counter()
+        grid = await i2c.read_touch_data()
         
-        # Only read if minimum interval has passed and no position update is pending
-        if current_time - last_successful_read >= min_interval:
-            grid = i2c.read_touch_data()
-            
-            # Update sequencer state based on touch data
-            changed = False
-            for row in range(4):
-                for col in range(20):
-                    if grid[row][col]:
-                        sequencer_on[row][col] = 1 - sequencer_on[row][col]
-                        sequencer_changed[col] = 1
-                        changed = True
-            
-            # Only send sample state updates if there were actual changes
-            if changed:
-                for row in range(4):
-                    for col in range(20):
-                        if sequencer_changed[col]:
-                            i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
-            
-            last_successful_read = current_time
+        # Update sequencer state based on touch data
+        for row in range(4):
+            for col in range(20):
+                if grid[row][col]:
+                    sequencer_on[row][col] = 1 - sequencer_on[row][col]
+                    sequencer_changed[col] = 1
+                    await i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
         
-        # Adaptive sleep based on system load
-        time.sleep(0.001)  # Minimal sleep to prevent busy-waiting
+        # Use asyncio.sleep instead of time.sleep
+        await asyncio.sleep(0.05)
+
 
 # Main loop with metronome and PID control
 def main_loop(i2c: I2CController):
@@ -366,7 +313,7 @@ def main_loop(i2c: I2CController):
             if not calculated:
                 
                 # Send current position to Arduino
-                i2c.send_position(SEQUENCER_GLOBAL_STEP)
+                await i2c.send_position(SEQUENCER_GLOBAL_STEP)
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
@@ -398,7 +345,7 @@ SEQUENCER_GLOBAL_STEP = 0
 SEQUENCER_CHANGED = [0 for _ in range(SEQUENCE_LENGTH)] 
 
 
-def main():
+async def main():
     print(f"Running commit: {get_git_commit_hash()}")
     
     if not is_raspberry_pi():
@@ -407,21 +354,21 @@ def main():
     
     print("Running on a Raspberry Pi.")
 
-    i2c = I2CController()
+    i2c = AsyncI2CController()
 
-    # Start the audio rendering thread
-    sound_thread = threading.Thread(target=render)
-    sound_thread.daemon = True
-    sound_thread.start()
+    # Create tasks for both the sequencer and touch input
+    touch_task = asyncio.create_task(
+        update_sequencer_from_touch(
+            i2c, 
+            SEQUENCER_ON, 
+            SEQUENCER_CHANGED
+        )
+    )
+    
+    main_task = asyncio.create_task(main_loop(i2c))
 
-    # Start the touch input thread
-    touch_thread = threading.Thread(target=update_sequencer_from_touch, 
-                                  args=(i2c, SEQUENCER_ON, SEQUENCER_CHANGED))
-    touch_thread.daemon = True
-    touch_thread.start()
-
-    # Start the main loop
-    main_loop(i2c)
+    # Wait for both tasks
+    await asyncio.gather(touch_task, main_task)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
