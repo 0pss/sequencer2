@@ -41,130 +41,6 @@ def get_git_commit_hash() -> str:
         return f"Error retrieving Git commit hash: {e}"
 
 
-class I2CController:
-    def __init__(self, address: int = 0x08):
-        self.bus = smbus.SMBus(1)  # Use 1 for newer Raspberry Pi versions
-        self.address = address
-        self.touch_data = [0, 0]  # Store data from both MPR121s
-        self.current_bpm = 120
-        self._lock = threading.Lock()
-        
-    def read_touch_data(self) -> List[List[int]]:
-        """
-        Read touch data from Arduino and convert to grid format.
-        Returns a 4x20 list where 1 indicates a touched position.
-        The grid is addressed as follows:
-        - First MPR121: 12 columns (0-11)
-        - Second MPR121: 8 columns (12-19) and 4 rows
-        """
-        try:
-            with self._lock:
-                # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
-                data = self.bus.read_i2c_block_data(self.address, 0, 5)
-                
-                # Extract touch data
-                touch2 = (data[1] << 8) | data[0]  # First MPR121 (12 columns)
-                touch1 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
-                self.current_bpm = data[4]
-
-                
-                # Initialize grid
-                grid = [[0 for _ in range(20)] for _ in range(4)]
-
-                # Get active row(s) from second MPR121 (last 4 bits)
-                active_rows = []
-
-                # TODO: this can be cut short, by checking rows first
-
-                # Convert touch1 and touch2 to binary strings with fixed length (assumed 12 bits each for example)
-                bits1 = bin(touch1)[2:].zfill(12)  # Pad to 12 bits
-                bits2 = bin(touch2)[2:].zfill(12)  # Pad to 12 bits
-                print("recieved: ", bits1, bits2, data[4])
-
-                #print(bits1, "\n", bits2)
-
-                # Extract columns and rows with fixed lengths
-                cols = bits1 + bits2[:7]  # Concatenate bits1 and first 7 bits of bits2
-                rows = bits2[8:]          # Last 4 bits of bits2
-
-                #print("Rows:", rows, "\nCols:", cols)
-
-                # Fill grid based on cols value
-                for i, c in enumerate(cols):
-                    if int(c) > 0:
-                        grid[0][i] = 1
-
-                print("====")
-                for row in grid:
-                    print(row, "\n")
-                print("====")
-                
-                return grid
-                
-        except Exception as e:
-            print(f"I2C read error: {e}")
-            return [[0 for _ in range(20)] for _ in range(4)]
-    
-    def send_position(self, position: int):
-        """
-        Send current sequencer position to Arduino for LED display.
-        track: 0-3
-        position: 0-19
-        """
-        try:
-            with self._lock:
-                # Pack track and position into single byte
-                data = (position & 0x3F)
-                print("sending position: ", position, "and data:", data)
-                self.bus.write_i2c_block_data(self.address, 0x01, [data])
-        except Exception as e:
-            print(f"I2C write error (position): {e}")
-    
-    def send_sample_state(self, track: int, position: int, active: bool):
-        """
-        Send sample state to Arduino for LED display.
-        track: 0-3
-        position: 0-19
-        active: True if sample is active
-        """
-        try:
-            with self._lock:
-                # Pack track and position into single byte
-                data = (track << 6) | (position & 0x3F)
-                print("sending sample state:", [data, 1 if active else 0] )
-                self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
-        except Exception as e:
-            print(f"I2C write error (sample state): {e}")
-
-    def get_bpm(self) -> int:
-        """Returns the current BPM value from the rotary encoder."""
-        return self.current_bpm
-
-def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]], sequencer_changed: List[int]):
-    """
-    Continuously update sequencer state based on touch input.
-    """
-    while True:
-        grid = i2c.read_touch_data()
-        
-        # Update sequencer state based on touch data
-        for row in range(4):
-            for col in range(20):
-                if grid[row][col]:  # If position is touched
-                    # Toggle the state
-                    print("here")
-                    sequencer_on[row][col] = 1 - sequencer_on[row][col]
-                    sequencer_changed[col] = 1
-                    # Send new state to Arduino
-                    i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
-                    print("there")
-        
-        time.sleep(0.05)  # Small delay to prevent overwhelming the I2C bus
-        print(sequencer_on)
-        print("\n")
-        print(sequencer_changed)
-
-
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
         self.Kp = Kp
@@ -241,6 +117,8 @@ def Wave2numpy(wave_obj):
     return numpy_array.reshape(-1, wave_obj.num_channels)
 
 
+
+
 def render():
     """ Render the audio for columns that have changed. """
     global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_ON
@@ -307,6 +185,124 @@ def load_n_samples(folder_path, n):
 
     return samples_out
 
+
+
+class I2CController:
+    def __init__(self, address: int = 0x08):
+        self.bus = smbus.SMBus(1)
+        self.address = address
+        self.touch_data = [0, 0]
+        self.current_bpm = 120
+        self._lock = threading.Lock()
+        # Add event for signaling when position update is needed
+        self.position_update_event = threading.Event()
+        
+    def read_touch_data(self) -> List[List[int]]:
+        """
+        Read touch data from Arduino and convert to grid format.
+        Now checks if position update is pending before reading.
+        """
+        # Check if position update is pending and wait if necessary
+        if self.position_update_event.is_set():
+            return [[0 for _ in range(20)] for _ in range(4)]
+            
+        try:
+            with self._lock:
+                # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
+                data = self.bus.read_i2c_block_data(self.address, 0, 5)
+                
+                # Extract touch data
+                touch2 = (data[1] << 8) | data[0]
+                touch1 = (data[3] << 8) | data[2]
+                self.current_bpm = data[4]
+
+                # Rest of the processing remains the same
+                grid = [[0 for _ in range(20)] for _ in range(4)]
+                
+                bits1 = bin(touch1)[2:].zfill(12)
+                bits2 = bin(touch2)[2:].zfill(12)
+                
+                cols = bits1 + bits2[:7]
+                rows = bits2[8:]
+
+                for i, c in enumerate(cols):
+                    if int(c) > 0:
+                        grid[0][i] = 1
+                
+                return grid
+                
+        except Exception as e:
+            print(f"I2C read error: {e}")
+            return [[0 for _ in range(20)] for _ in range(4)]
+    
+    def send_position(self, position: int):
+        """
+        Send current sequencer position to Arduino for LED display.
+        Now uses event to pause touch reading.
+        """
+        try:
+            # Signal that position update is starting
+            self.position_update_event.set()
+            
+            with self._lock:
+                data = (position & 0x3F)
+                print("sending position: ", position, "and data:", data)
+                self.bus.write_i2c_block_data(self.address, 0x01, [data])
+                
+            # Small delay to ensure position update completes
+            time.sleep(0.001)
+            
+        except Exception as e:
+            print(f"I2C write error (position): {e}")
+        finally:
+            # Clear the event to resume touch reading
+            self.position_update_event.clear()
+    
+    def send_sample_state(self, track: int, position: int, active: bool):
+        """
+        Send sample state to Arduino for LED display.
+        Now uses event to pause touch reading.
+        """
+        try:
+            # Signal that position update is starting
+            self.position_update_event.set()
+            
+            with self._lock:
+                data = (track << 6) | (position & 0x3F)
+                self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
+                
+            # Small delay to ensure sample state update completes
+            time.sleep(0.001)
+            
+        except Exception as e:
+            print(f"I2C write error (sample state): {e}")
+        finally:
+            # Clear the event to resume touch reading
+            self.position_update_event.clear()
+
+    def get_bpm(self) -> int:
+        return self.current_bpm
+
+def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]], sequencer_changed: List[int]):
+    """
+    Continuously update sequencer state based on touch input.
+    Now includes rate limiting and checks for position updates.
+    """
+    while True:
+        # Only read if no position update is pending
+        if not i2c.position_update_event.is_set():
+            grid = i2c.read_touch_data()
+            
+            # Update sequencer state based on touch data
+            for row in range(4):
+                for col in range(20):
+                    if grid[row][col]:
+                        sequencer_on[row][col] = 1 - sequencer_on[row][col]
+                        sequencer_changed[col] = 1
+                        i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
+        
+        # Reduced polling rate to prevent overwhelming the bus
+        time.sleep(0.1)  # Increased delay to give more time for position updates
 
 # Main loop with metronome and PID control
 def main_loop(i2c: I2CController):
