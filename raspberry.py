@@ -346,9 +346,6 @@ def main_loop(i2c: I2CController):
             # Play audio
             SEQUENCER_AUDIO[SEQUENCER_GLOBAL_STEP].play()
             
-            # Send current position to Arduino
-            i2c.send_position(SEQUENCER_GLOBAL_STEP)
-
             # Update step
             SEQUENCER_GLOBAL_STEP = (SEQUENCER_GLOBAL_STEP + 1) % SEQUENCE_LENGTH
             
@@ -357,9 +354,13 @@ def main_loop(i2c: I2CController):
             
         else:
             if not calculated:
+                
+                # Send current position to Arduino
+                i2c.send_position(SEQUENCER_GLOBAL_STEP)
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
+                
 
 
 
