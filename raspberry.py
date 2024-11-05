@@ -63,8 +63,8 @@ class I2CController:
                 data = self.bus.read_i2c_block_data(self.address, 0, 5)
                 
                 # Extract touch data
-                touch1 = (data[1] << 8) | data[0]  # First MPR121 (12 columns)
-                touch2 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
+                touch2 = (data[1] << 8) | data[0]  # First MPR121 (12 columns)
+                touch1 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
                 self.current_bpm = data[4]
 
                 print("recieved: ", touch1, touch2, data[4])
@@ -78,8 +78,8 @@ class I2CController:
                     if touch2 & (1 << i):
                         active_rows.append(i - 8)
                 
-                if not active_rows:  # If no row is active, no need to process columns
-                    return grid
+               # if not active_rows:  # If no row is active, no need to process columns
+                #    return grid
                 
                 # Process first MPR121 (first 12 columns)
                 for col in range(12):
