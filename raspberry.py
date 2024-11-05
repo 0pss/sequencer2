@@ -267,7 +267,7 @@ async def main_loop(i2c: AsyncI2CController):
     """Main sequencer loop with metronome and PID control"""
     # Initialize variables
     bpm = 120
-    delay = wait_time = 60/bpm
+    delay = wait_time = 60/120#bpm
     pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
     
     SEQUENCER_GLOBAL_STEP = 0
