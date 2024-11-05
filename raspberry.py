@@ -48,7 +48,6 @@ class I2CController:
         self.touch_data = [0, 0]  # Store data from both MPR121s
         self.current_bpm = 120
         self._lock = threading.Lock()
-        self.state = False
         
     def read_touch_data(self) -> List[List[int]]:
         """
@@ -118,7 +117,6 @@ class I2CController:
                 data = (position & 0x3F)
                 print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
-                self.state=True
         except Exception as e:
             print(f"I2C write error (position): {e}")
     
@@ -146,30 +144,23 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
     """
     Continuously update sequencer state based on touch input.
     """
-
-    global SEQUENCER_GLOBAL_STEP
-
     while True:
-        if i2c.state:
-            grid = i2c.read_touch_data()
-            
-            # Update sequencer state based on touch data
-            for row in range(4):
-                for col in range(20):
-                    if grid[row][col]:  # If position is touched
-                        # Toggle the state
-                        sequencer_on[row][col] = 1 - sequencer_on[row][col]
-                        sequencer_changed[col] = 1
-                        # Send new state to Arduino
-                        data = ( SEQUENCER_GLOBAL_STEP & 0x3F)
-                        print("sending position: ", SEQUENCER_GLOBAL_STEP, "and data:", data)
-                        i2c.bus.write_i2c_block_data(i2c.address, 0x01, [data])
-                        i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
-            i2c.state = False
-            time.sleep(0.1)  # Small delay to prevent overwhelming the I2C bus
-            print(sequencer_on)
-            print("\n")
-            print(sequencer_changed)
+        grid = i2c.read_touch_data()
+        
+        # Update sequencer state based on touch data
+        for row in range(4):
+            for col in range(20):
+                if grid[row][col]:  # If position is touched
+                    # Toggle the state
+                    sequencer_on[row][col] = 1 - sequencer_on[row][col]
+                    sequencer_changed[col] = 1
+                    # Send new state to Arduino
+                    i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
+        
+        time.sleep(1)  # Small delay to prevent overwhelming the I2C bus
+        print(sequencer_on)
+        print("\n")
+        print(sequencer_changed)
 
 
 class PIDController:
