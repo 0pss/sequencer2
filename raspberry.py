@@ -66,6 +66,8 @@ class I2CController:
                 touch1 = (data[1] << 8) | data[0]  # First MPR121 (12 columns)
                 touch2 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
                 self.current_bpm = data[4]
+
+                print(data)
                 
                 # Initialize grid
                 grid = [[0 for _ in range(20)] for _ in range(4)]
@@ -90,6 +92,8 @@ class I2CController:
                     if touch2 & (1 << col):
                         for row in active_rows:
                             grid[row][col + 12] = 1
+
+                print(grid)
                 
                 return grid
                 
@@ -226,10 +230,6 @@ def Wave2numpy(wave_obj):
     return numpy_array.reshape(-1, wave_obj.num_channels)
 
 
-
-
-
-
 def render():
     """ Render the audio for columns that have changed. """
     global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_ON
@@ -280,9 +280,6 @@ def render():
         time.sleep(0.01)  # Sleep for 10 milliseconds to reduce CPU load
 
                     
-
-
-
 def load_n_samples(folder_path, n):
     wav_files = sorted([f for f in os.listdir(folder_path) if f.endswith('.wav')])[:n]
     samples = [sa.WaveObject.from_wave_file(os.path.join(folder_path, wav_file)) for wav_file in wav_files]
@@ -308,7 +305,7 @@ def main_loop(i2c: I2CController):
     RAW_SAMPLES = load_n_samples("./", SEQUENCE_SAMPLES)
 
     # Use BPM from encoder
-    bpm = i2c.get_bpm()
+    bpm = 120#i2c.get_bpm()
     delay = d = wait_time = 60/bpm
     print(f'{60 / delay} bpm')
 
@@ -380,8 +377,6 @@ SEQUENCER_AUDIO_new = [create_silent_wave() for _ in range(SEQUENCE_LENGTH)]
 SEQUENCER_GLOBAL_STEP = 0
 
 SEQUENCER_CHANGED = [0 for _ in range(SEQUENCE_LENGTH)] 
-
-
 
 
 def main():
