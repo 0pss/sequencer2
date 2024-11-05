@@ -146,6 +146,9 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
     """
     Continuously update sequencer state based on touch input.
     """
+
+    global SEQUENCER_GLOBAL_STEP
+
     while True:
         if i2c.state:
             grid = i2c.read_touch_data()
@@ -158,6 +161,9 @@ def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]
                         sequencer_on[row][col] = 1 - sequencer_on[row][col]
                         sequencer_changed[col] = 1
                         # Send new state to Arduino
+                        data = ( SEQUENCER_GLOBAL_STEP & 0x3F)
+                        print("sending position: ", SEQUENCER_GLOBAL_STEP, "and data:", data)
+                        i2c.bus.write_i2c_block_data(i2c.address, 0x01, [data])
                         i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
             i2c.state = False
             time.sleep(0.1)  # Small delay to prevent overwhelming the I2C bus
