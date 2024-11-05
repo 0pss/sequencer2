@@ -263,42 +263,34 @@ async def update_sequencer_from_touch(i2c: AsyncI2CController,
         await asyncio.sleep(0.05)
 
 
-# Main loop with metronome and PID control
-def main_loop(i2c: I2CController):
-    global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_GLOBAL_STEP, BPM, STOPED, SEQUENCER_ON
-
-    # Load samples
-    RAW_SAMPLES = load_n_samples("./", SEQUENCE_SAMPLES)
-
-    # Use BPM from encoder
-    bpm = 120#i2c.get_bpm()
-    delay = d = wait_time = 60/bpm
-    print(f'{60 / delay} bpm')
-
-    a = perf_counter()
-    calculated = True
-    pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
-
+async def main_loop(i2c: AsyncI2CController):
+    """Main sequencer loop with metronome and PID control"""
+    # Initialize variables
+    bpm = 120
+    delay = wait_time = 60/bpm
+    pid = AsyncPIDController(Kp=0.5, Ki=0.1, Kd=0.01)
+    
     SEQUENCER_GLOBAL_STEP = 0
     SEQUENCER_ON = [[0 for _ in range(20)] for _ in range(4)]
     SEQUENCER_CHANGED = [0 for _ in range(20)]
     SEQUENCER_AUDIO = [create_silent_wave() for _ in range(20)]
 
-    STOPED = False
+    last_tick = perf_counter()
+    calculated = True
 
-    while not STOPED:
+    while True:
         # Update BPM from encoder
         new_bpm = i2c.get_bpm()
         if new_bpm != bpm:
             bpm = new_bpm
-            d = 60/bpm
+            delay = 60/bpm
             print(f'New BPM: {bpm}')
 
-        b = perf_counter()
-        te = abs(b-a)
+        current_time = perf_counter()
+        time_elapsed = current_time - last_tick
 
-        if (te > wait_time) or a == 0:
-            a = perf_counter()
+        if (time_elapsed > wait_time) or last_tick == 0:
+            last_tick = current_time
             
             # Play audio
             SEQUENCER_AUDIO[SEQUENCER_GLOBAL_STEP].play()
@@ -306,17 +298,20 @@ def main_loop(i2c: I2CController):
             # Update step
             SEQUENCER_GLOBAL_STEP = (SEQUENCER_GLOBAL_STEP + 1) % SEQUENCE_LENGTH
             
-            delay = te - d
+            # Calculate timing error
+            timing_error = time_elapsed - delay
             calculated = False
             
         else:
             if not calculated:
-                
                 # Send current position to Arduino
                 await i2c.send_position(SEQUENCER_GLOBAL_STEP)
-                correction = pid.update(delay, d)
-                wait_time = max(0, d - correction)
+                
+                # Update PID controller
+                correction = pid.update(timing_error, delay)
+                wait_time = max(0, delay - correction)
                 calculated = True
+
                 
 
 
