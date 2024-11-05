@@ -8,6 +8,7 @@ from typing import Tuple
 import smbus2 as smbus
 import threading
 import time
+from time import perf_counter
 import numpy as np
 import simpleaudio as sa
 import struct
