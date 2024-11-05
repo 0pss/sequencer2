@@ -67,7 +67,6 @@ class I2CController:
                 touch1 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
                 self.current_bpm = data[4]
 
-                print("recieved: ", touch1, touch2, data[4])
                 
                 # Initialize grid
                 grid = [[0 for _ in range(20)] for _ in range(4)]
@@ -80,14 +79,15 @@ class I2CController:
                 # Convert touch1 and touch2 to binary strings with fixed length (assumed 12 bits each for example)
                 bits1 = bin(touch1)[2:].zfill(12)  # Pad to 12 bits
                 bits2 = bin(touch2)[2:].zfill(12)  # Pad to 12 bits
+                print("recieved: ", bits1, bits2, data[4])
 
-                print(bits1, "\n", bits2)
+                #print(bits1, "\n", bits2)
 
                 # Extract columns and rows with fixed lengths
                 cols = bits1 + bits2[:7]  # Concatenate bits1 and first 7 bits of bits2
                 rows = bits2[8:]          # Last 4 bits of bits2
 
-                print("Rows:", rows, "\nCols:", cols)
+                #print("Rows:", rows, "\nCols:", cols)
 
                 # Fill grid based on cols value
                 for i, c in enumerate(cols):
