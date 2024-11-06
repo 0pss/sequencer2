@@ -162,6 +162,14 @@ class I2CController:
 
     def get_bpm(self) -> int:
         """Returns the current BPM value from the rotary encoder."""
+        try:
+            with self._lock:
+                data = self.bus.read_i2c_block_data(self.address, 0, 1)
+                print(data)
+
+        except Exception as e:
+            print(f"I2C write error (position): {e}")
+
         return self.current_bpm
 
     def __del__(self):
