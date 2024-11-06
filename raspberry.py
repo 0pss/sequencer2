@@ -62,7 +62,7 @@ class I2CController:
                 print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
 
-                self.bus.write_i2c_block_data(self.address, 0x02, [0])
+                self.bus.write_i2c_block_data(self.address, 0x02, [data])
 
 
         except Exception as e:
