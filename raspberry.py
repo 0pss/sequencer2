@@ -279,7 +279,7 @@ def main_loop(i2c: I2CController):
         new_bpm = i2c.get_bpm()
         if new_bpm != bpm:
             bpm = new_bpm
-            d = 60/bpm
+            d = 60/120#bpm
             print(f'New BPM: {bpm}')
 
         b = perf_counter()
