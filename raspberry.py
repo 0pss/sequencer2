@@ -40,9 +40,6 @@ def get_git_commit_hash() -> str:
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
 
-import threading
-from typing import Tuple
-import smbus
 
 class I2CController:
     # MPR121 Register addresses
