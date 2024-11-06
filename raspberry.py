@@ -66,7 +66,7 @@ class DualMPR121Handler:
     
     def __init__(self, bus_number=1):
         """Initialize the MPR121 sensors using smbus2."""
-        self.bus = SMBus(bus_number)
+        self.bus = smbus.SMBus(bus_number)
         self.address1 = 0x5A
         self.address2 = 0x5B
         
