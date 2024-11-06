@@ -40,7 +40,11 @@ def get_git_commit_hash() -> str:
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
 
-class DualMPR121Handler:
+import threading
+from typing import Tuple
+import smbus
+
+class I2CController:
     # MPR121 Register addresses
     TOUCH_STATUS_REG = 0x00
     ELE_CFG_REG = 0x5E
@@ -63,50 +67,62 @@ class DualMPR121Handler:
     ELE0_R = 0x42
     AUTO_CONFIG_0 = 0x7B
     AUTO_CONFIG_1 = 0x7C
-    
-    def __init__(self, bus_number=1):
-        """Initialize the MPR121 sensors using smbus2."""
-        self.bus = smbus.SMBus(bus_number)
-        self.address1 = 0x5A
-        self.address2 = 0x5B
+
+    def __init__(self, arduino_address: int = 0x08, bus_number: int = 1):
+        """
+        Initialize the I2C controller with both Arduino and MPR121 support.
         
-        # Initialize both sensors
-        for address in [self.address1, self.address2]:
+        Args:
+            arduino_address: I2C address of the Arduino
+            bus_number: I2C bus number (usually 1 for newer Raspberry Pi)
+        """
+        self.bus = smbus.SMBus(bus_number)
+        self.arduino_address = arduino_address
+        self.mpr121_address1 = 0x5A
+        self.mpr121_address2 = 0x5B
+        self.touch_data = [0, 0]  # Store data from both MPR121s
+        self.current_bpm = 120
+        self._lock = threading.Lock()
+
+        # Initialize both MPR121 sensors
+        for address in [self.mpr121_address1, self.mpr121_address2]:
             self._init_mpr121(address)
-    
+
     def _init_mpr121(self, address):
         """Initialize a single MPR121 sensor with default configuration."""
-        # Soft reset
         try:
-            self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x00)
-            
-            # Configure touch and release thresholds for all electrodes
-            for i in range(12):
-                self.bus.write_byte_data(address, self.ELE0_T + i*2, 12)  # Touch threshold
-                self.bus.write_byte_data(address, self.ELE0_R + i*2, 6)   # Release threshold
-            
-            # Configure baseline filtering
-            self.bus.write_byte_data(address, self.MHD_R, 0x01)
-            self.bus.write_byte_data(address, self.NHD_R, 0x01)
-            self.bus.write_byte_data(address, self.NCL_R, 0x00)
-            self.bus.write_byte_data(address, self.FDL_R, 0x00)
-            
-            # Enable all electrodes and auto configuration
-            self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x0C)  # Enable first 12 electrodes
-            self.bus.write_byte_data(address, self.AUTO_CONFIG_0, 0x0B)
-            self.bus.write_byte_data(address, self.AUTO_CONFIG_1, 0x9F)
-            
+            with self._lock:
+                # Soft reset
+                self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x00)
+                
+                # Configure touch and release thresholds for all electrodes
+                for i in range(12):
+                    self.bus.write_byte_data(address, self.ELE0_T + i*2, 12)  # Touch threshold
+                    self.bus.write_byte_data(address, self.ELE0_R + i*2, 6)   # Release threshold
+                
+                # Configure baseline filtering
+                self.bus.write_byte_data(address, self.MHD_R, 0x01)
+                self.bus.write_byte_data(address, self.NHD_R, 0x01)
+                self.bus.write_byte_data(address, self.NCL_R, 0x00)
+                self.bus.write_byte_data(address, self.FDL_R, 0x00)
+                
+                # Enable all electrodes and auto configuration
+                self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x0C)
+                self.bus.write_byte_data(address, self.AUTO_CONFIG_0, 0x0B)
+                self.bus.write_byte_data(address, self.AUTO_CONFIG_1, 0x9F)
+                
         except IOError as e:
             print(f"Error initializing MPR121 at address 0x{address:02X}: {e}")
             raise
-    
-    def read_sensors(self) -> Tuple[list, list]:
-        """Read the status of all inputs from both sensors."""
+
+    def read_touch_sensors(self) -> Tuple[list, list]:
+        """Read the status of all inputs from both MPR121 sensors."""
         try:
-            # Read touch status registers (2 bytes each sensor)
-            status1 = self.bus.read_word_data(self.address1, self.TOUCH_STATUS_REG)
-            status2 = self.bus.read_word_data(self.address2, self.TOUCH_STATUS_REG)
-            
+            with self._lock:
+                # Read touch status registers (2 bytes each sensor)
+                status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
+                status2 = self.bus.read_word_data(self.mpr121_address2, self.TOUCH_STATUS_REG)
+                
             # Convert to list of boolean values for each electrode
             sensor1_status = [(status1 & (1 << i)) != 0 for i in range(12)]
             sensor2_status = [(status2 & (1 << i)) != 0 for i in range(12)]
@@ -114,12 +130,12 @@ class DualMPR121Handler:
             return sensor1_status, sensor2_status
             
         except IOError as e:
-            print(f"Error reading sensors: {e}")
+            print(f"Error reading touch sensors: {e}")
             return [False] * 12, [False] * 12
-    
+
     def print_touched_inputs(self):
         """Print which inputs are currently being touched on both sensors."""
-        sensor1_status, sensor2_status = self.read_sensors()
+        sensor1_status, sensor2_status = self.read_touch_sensors()
         
         # Check sensor 1
         for i, touched in enumerate(sensor1_status):
@@ -130,34 +146,19 @@ class DualMPR121Handler:
         for i, touched in enumerate(sensor2_status):
             if touched:
                 print(f"Sensor 2 - Input {i} is touched.")
-    
-    def __del__(self):
-        """Clean up the SMBus connection when the object is destroyed."""
-        try:
-            self.bus.close()
-        except:
-            pass
 
-class I2CController:
-    def __init__(self, address: int = 0x08):
-        self.bus = smbus.SMBus(1)  # Use 1 for newer Raspberry Pi versions
-        self.address = address
-        self.touch_data = [0, 0]  # Store data from both MPR121s
-        self.current_bpm = 120
-        self._lock = threading.Lock()
-    
     def send_position(self, position: int):
         """
         Send current sequencer position to Arduino for LED display.
-        track: 0-3
-        position: 0-19
+        
+        Args:
+            position: 0-63 position value
         """
         try:
             with self._lock:
-                # Pack track and position into single byte
-                data = (position & 0x3F)
-                print("sending position: ", position, "and data:", data)
-                self.bus.write_i2c_block_data(self.address, 0x01, [data])
+                data = (position & 0x3F)  # Ensure position is within 6-bit range
+                print(f"sending position: {position} and data: {data}")
+                self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
 
         except Exception as e:
             print(f"I2C write error (position): {e}")
@@ -166,6 +167,12 @@ class I2CController:
         """Returns the current BPM value from the rotary encoder."""
         return self.current_bpm
 
+    def __del__(self):
+        """Clean up the SMBus connection when the object is destroyed."""
+        try:
+            self.bus.close()
+        except:
+            pass
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
         self.Kp = Kp
@@ -324,7 +331,6 @@ def main_loop(i2c: I2CController):
     a = perf_counter()
     calculated = True
     pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
-    handler = DualMPR121Handler()
 
     SEQUENCER_GLOBAL_STEP = 0
     SEQUENCER_ON = [[0 for _ in range(20)] for _ in range(4)]
@@ -358,7 +364,7 @@ def main_loop(i2c: I2CController):
                 
                 # Send current position to Arduino
                 i2c.send_position(SEQUENCER_GLOBAL_STEP)
-                handler.print_touched_inputs()                
+                i2c.print_touched_inputs()                
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
