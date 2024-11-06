@@ -118,6 +118,8 @@ class I2CController:
             bits1 = bin(touch1)[2:].zfill(12)
             bits2 = bin(touch2)[2:].zfill(12)
 
+            print("RECIEVED:", bits1, " ", bits2)
+
             # Extract columns and rows
             cols = bits1 + bits2[:7]
             rows = bits2[8:]
