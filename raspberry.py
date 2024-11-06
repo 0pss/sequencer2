@@ -349,12 +349,6 @@ def main():
     sound_thread.daemon = True
     sound_thread.start()
 
-    # Start the touch input thread
-    touch_thread = threading.Thread(target=update_sequencer_from_touch, 
-                                  args=(i2c, SEQUENCER_ON, SEQUENCER_CHANGED))
-    touch_thread.daemon = True
-    touch_thread.start()
-
     # Start the main loop
     main_loop(i2c)
 
