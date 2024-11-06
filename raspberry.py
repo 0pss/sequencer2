@@ -84,23 +84,25 @@ class I2CController:
                 bits2 = bin(touch2)[2:].zfill(12)  # Pad to 12 bits
                 print("recieved: ", bits1, bits2, data[4])
 
-                #print(bits1, "\n", bits2)
+                if (bits1 != "111111111111" and bits2 != "111111111111"):
 
-                # Extract columns and rows with fixed lengths
-                cols = bits1 + bits2[:7]  # Concatenate bits1 and first 7 bits of bits2
-                rows = bits2[8:]          # Last 4 bits of bits2
+                    #print(bits1, "\n", bits2)
 
-                #print("Rows:", rows, "\nCols:", cols)
+                    # Extract columns and rows with fixed lengths
+                    cols = bits1 + bits2[:7]  # Concatenate bits1 and first 7 bits of bits2
+                    rows = bits2[8:]          # Last 4 bits of bits2
 
-                # Fill grid based on cols value
-                for i, c in enumerate(cols):
-                    if int(c) > 0:
-                        grid[0][i] = 1
+                    #print("Rows:", rows, "\nCols:", cols)
 
-                print("====")
-                for row in grid:
-                    print(row, "\n")
-                print("====")
+                    # Fill grid based on cols value
+                    for i, c in enumerate(cols):
+                        if int(c) > 0:
+                            grid[0][i] = 1
+
+                    print("====")
+                    for row in grid:
+                        print(row, "\n")
+                    print("====")
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
