@@ -65,7 +65,7 @@ class I2CController:
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
-        def get_sens(self):
+    def get_sens(self):
         """
         Send current sequencer position to Arduino for LED display.
         track: 0-3
