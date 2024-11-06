@@ -13,12 +13,7 @@ import numpy as np
 import simpleaudio as sa
 import struct
 from typing import List, Tuple
-import queue
-import threading
-import time
-from dataclasses import dataclass
-from enum import Enum, auto
-from typing import List, Optional
+
 
 
 
@@ -45,163 +40,73 @@ def get_git_commit_hash() -> str:
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
 
-# Define message types for our queue
-class MessageType(Enum):
-    READ_TOUCH = auto()
-    SEND_POSITION = auto()
-    SEND_SAMPLE = auto()
-
-@dataclass
-class I2CMessage:
-    type: MessageType
-    data: dict
-    response_queue: Optional[queue.Queue] = None
 
 class I2CController:
     def __init__(self, address: int = 0x08):
-        self.bus = smbus.SMBus(1)
+        self.bus = smbus.SMBus(1)  # Use 1 for newer Raspberry Pi versions
         self.address = address
+        self.touch_data = [0, 0]  # Store data from both MPR121s
         self.current_bpm = 120
-        self._message_queue = queue.Queue()
-        
-        # Start the message processing thread
-        self._processing_thread = threading.Thread(target=self._process_messages, daemon=True)
-        self._processing_thread.start()
-        
-    def _process_messages(self):
+        self._lock = threading.Lock()
+    
+    def send_position(self, position: int):
         """
-        Main message processing loop.
-        Handles all I2C communications sequentially.
+        Send current sequencer position to Arduino for LED display.
+        track: 0-3
+        position: 0-19
         """
-        while True:
-            try:
-                message = self._message_queue.get()
-                
-                if message.type == MessageType.READ_TOUCH:
-                    result = self._read_touch_data_internal()
-                    if message.response_queue:
-                        message.response_queue.put(result)
-                        
-                elif message.type == MessageType.SEND_POSITION:
-                    self._send_position_internal(message.data['position'])
-                    
-                elif message.type == MessageType.SEND_SAMPLE:
-                    self._send_sample_state_internal(
-                        message.data['track'],
-                        message.data['position'],
-                        message.data['active']
-                    )
-                
-                # Small delay between messages to ensure clean communication
-                time.sleep(0.001)
-                
-            except Exception as e:
-                print(f"Error processing I2C message: {e}")
-            finally:
-                self._message_queue.task_done()
-
-    def _read_touch_data_internal(self) -> List[List[int]]:
-        """Internal method to actually perform the I2C read operation"""
         try:
-            # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
-            data = self.bus.read_i2c_block_data(self.address, 0, 5)
-            
-            # Extract touch data
-            touch2 = (data[1] << 8) | data[0]
-            touch1 = (data[3] << 8) | data[2]
-            self.current_bpm = data[4]
+            with self._lock:
+                # Pack track and position into single byte
+                data = (position & 0x3F)
+                print("sending position: ", position, "and data:", data)
+                self.bus.write_i2c_block_data(self.address, 0x01, [data])
 
-            # Initialize grid
-            grid = [[0 for _ in range(20)] for _ in range(4)]
+                # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
+                data = self.bus.read_i2c_block_data(self.address, 0, 5)
+                
+                # Extract touch data
+                touch2 = (data[1] << 8) | data[0]  # First MPR121 (12 columns)
+                touch1 = (data[3] << 8) | data[2]  # Second MPR121 (8 columns + 4 rows)
+                self.current_bpm = data[4]
 
-            # Convert touch data to binary strings
-            bits1 = bin(touch1)[2:].zfill(12)
-            bits2 = bin(touch2)[2:].zfill(12)
+                
+                # Initialize grid
+                grid = [[0 for _ in range(20)] for _ in range(4)]
 
-            print("RECIEVED:", bits1, " ", bits2)
+                # Get active row(s) from second MPR121 (last 4 bits)
+                active_rows = []
 
-            # Extract columns and rows
-            cols = bits1 + bits2[:7]
-            rows = bits2[8:]
+                # TODO: this can be cut short, by checking rows first
 
-            # Fill grid based on cols value
-            for i, c in enumerate(cols):
-                if int(c) > 0:
-                    grid[0][i] = 1
+                # Convert touch1 and touch2 to binary strings with fixed length (assumed 12 bits each for example)
+                bits1 = bin(touch1)[2:].zfill(12)  # Pad to 12 bits
+                bits2 = bin(touch2)[2:].zfill(12)  # Pad to 12 bits
+                print("recieved: ", bits1, bits2, data[4])
 
-            return grid
-            
-        except Exception as e:
-            print(f"I2C read error: {e}")
-            return [[0 for _ in range(20)] for _ in range(4)]
+                #print(bits1, "\n", bits2)
 
-    def _send_position_internal(self, position: int):
-        """Internal method to actually perform the position update"""
-        try:
-            data = (position & 0x3F)
-            print("sending position: ", position, "and data:", data)
-            self.bus.write_i2c_block_data(self.address, 0x01, [data])
+                # Extract columns and rows with fixed lengths
+                cols = bits1 + bits2[:7]  # Concatenate bits1 and first 7 bits of bits2
+                rows = bits2[8:]          # Last 4 bits of bits2
+
+                #print("Rows:", rows, "\nCols:", cols)
+
+                # Fill grid based on cols value
+                for i, c in enumerate(cols):
+                    if int(c) > 0:
+                        grid[0][i] = 1
+
+                print("====")
+                for row in grid:
+                    print(row, "\n")
+                print("====")
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
-    def _send_sample_state_internal(self, track: int, position: int, active: bool):
-        """Internal method to actually perform the sample state update"""
-        try:
-            data = (track << 6) | (position & 0x3F)
-            self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
-        except Exception as e:
-            print(f"I2C write error (sample state): {e}")
-
-    # Public interface methods
-    def read_touch_data(self) -> List[List[int]]:
-        """Queue a touch data read request and wait for response"""
-        response_queue = queue.Queue()
-        self._message_queue.put(I2CMessage(
-            type=MessageType.READ_TOUCH,
-            data={},
-            response_queue=response_queue
-        ))
-        return response_queue.get()
-
-    def send_position(self, position: int):
-        """Queue a position update request"""
-        self._message_queue.put(I2CMessage(
-            type=MessageType.SEND_POSITION,
-            data={'position': position}
-        ))
-
-    def send_sample_state(self, track: int, position: int, active: bool):
-        """Queue a sample state update request"""
-        self._message_queue.put(I2CMessage(
-            type=MessageType.SEND_SAMPLE,
-            data={
-                'track': track,
-                'position': position,
-                'active': active
-            }
-        ))
-
     def get_bpm(self) -> int:
-        """Returns the current BPM value"""
+        """Returns the current BPM value from the rotary encoder."""
         return self.current_bpm
-
-def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]], sequencer_changed: List[int]):
-    """
-    Modified touch update function that works with the queue-based system
-    """
-    while True:
-        grid = i2c.read_touch_data()
-        
-        # Update sequencer state based on touch data
-        for row in range(4):
-            for col in range(20):
-                if grid[row][col]:
-                    sequencer_on[row][col] = 1 - sequencer_on[row][col]
-                    sequencer_changed[col] = 1
-                    i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
-        
-        # Reduced polling rate 
-        time.sleep(0.1)
 
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
