@@ -2,7 +2,6 @@ import os
 import platform
 import time
 import board
-import asyncio
 import busio
 import subprocess
 from typing import Tuple
@@ -14,7 +13,12 @@ import numpy as np
 import simpleaudio as sa
 import struct
 from typing import List, Tuple
-
+import queue
+import threading
+import time
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import List, Optional
 
 
 
@@ -40,6 +44,162 @@ def get_git_commit_hash() -> str:
         return commit_hash
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
+
+# Define message types for our queue
+class MessageType(Enum):
+    READ_TOUCH = auto()
+    SEND_POSITION = auto()
+    SEND_SAMPLE = auto()
+
+@dataclass
+class I2CMessage:
+    type: MessageType
+    data: dict
+    response_queue: Optional[queue.Queue] = None
+
+class I2CController:
+    def __init__(self, address: int = 0x08):
+        self.bus = smbus.SMBus(1)
+        self.address = address
+        self.current_bpm = 120
+        self._message_queue = queue.Queue()
+        
+        # Start the message processing thread
+        self._processing_thread = threading.Thread(target=self._process_messages, daemon=True)
+        self._processing_thread.start()
+        
+    def _process_messages(self):
+        """
+        Main message processing loop.
+        Handles all I2C communications sequentially.
+        """
+        while True:
+            try:
+                message = self._message_queue.get()
+                
+                if message.type == MessageType.READ_TOUCH:
+                    result = self._read_touch_data_internal()
+                    if message.response_queue:
+                        message.response_queue.put(result)
+                        
+                elif message.type == MessageType.SEND_POSITION:
+                    self._send_position_internal(message.data['position'])
+                    
+                elif message.type == MessageType.SEND_SAMPLE:
+                    self._send_sample_state_internal(
+                        message.data['track'],
+                        message.data['position'],
+                        message.data['active']
+                    )
+                
+                # Small delay between messages to ensure clean communication
+                time.sleep(0.001)
+                
+            except Exception as e:
+                print(f"Error processing I2C message: {e}")
+            finally:
+                self._message_queue.task_done()
+
+    def _read_touch_data_internal(self) -> List[List[int]]:
+        """Internal method to actually perform the I2C read operation"""
+        try:
+            # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
+            data = self.bus.read_i2c_block_data(self.address, 0, 5)
+            
+            # Extract touch data
+            touch2 = (data[1] << 8) | data[0]
+            touch1 = (data[3] << 8) | data[2]
+            self.current_bpm = data[4]
+
+            # Initialize grid
+            grid = [[0 for _ in range(20)] for _ in range(4)]
+
+            # Convert touch data to binary strings
+            bits1 = bin(touch1)[2:].zfill(12)
+            bits2 = bin(touch2)[2:].zfill(12)
+
+            # Extract columns and rows
+            cols = bits1 + bits2[:7]
+            rows = bits2[8:]
+
+            # Fill grid based on cols value
+            for i, c in enumerate(cols):
+                if int(c) > 0:
+                    grid[0][i] = 1
+
+            return grid
+            
+        except Exception as e:
+            print(f"I2C read error: {e}")
+            return [[0 for _ in range(20)] for _ in range(4)]
+
+    def _send_position_internal(self, position: int):
+        """Internal method to actually perform the position update"""
+        try:
+            data = (position & 0x3F)
+            print("sending position: ", position, "and data:", data)
+            self.bus.write_i2c_block_data(self.address, 0x01, [data])
+        except Exception as e:
+            print(f"I2C write error (position): {e}")
+
+    def _send_sample_state_internal(self, track: int, position: int, active: bool):
+        """Internal method to actually perform the sample state update"""
+        try:
+            data = (track << 6) | (position & 0x3F)
+            self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
+        except Exception as e:
+            print(f"I2C write error (sample state): {e}")
+
+    # Public interface methods
+    def read_touch_data(self) -> List[List[int]]:
+        """Queue a touch data read request and wait for response"""
+        response_queue = queue.Queue()
+        self._message_queue.put(I2CMessage(
+            type=MessageType.READ_TOUCH,
+            data={},
+            response_queue=response_queue
+        ))
+        return response_queue.get()
+
+    def send_position(self, position: int):
+        """Queue a position update request"""
+        self._message_queue.put(I2CMessage(
+            type=MessageType.SEND_POSITION,
+            data={'position': position}
+        ))
+
+    def send_sample_state(self, track: int, position: int, active: bool):
+        """Queue a sample state update request"""
+        self._message_queue.put(I2CMessage(
+            type=MessageType.SEND_SAMPLE,
+            data={
+                'track': track,
+                'position': position,
+                'active': active
+            }
+        ))
+
+    def get_bpm(self) -> int:
+        """Returns the current BPM value"""
+        return self.current_bpm
+
+def update_sequencer_from_touch(i2c: I2CController, sequencer_on: List[List[int]], sequencer_changed: List[int]):
+    """
+    Modified touch update function that works with the queue-based system
+    """
+    while True:
+        grid = i2c.read_touch_data()
+        
+        # Update sequencer state based on touch data
+        for row in range(4):
+            for col in range(20):
+                if grid[row][col]:
+                    sequencer_on[row][col] = 1 - sequencer_on[row][col]
+                    sequencer_changed[col] = 1
+                    i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
+        
+        # Reduced polling rate 
+        time.sleep(0.1)
 
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
@@ -116,6 +276,7 @@ def Wave2numpy(wave_obj):
     
     return numpy_array.reshape(-1, wave_obj.num_channels)
 
+
 def render():
     """ Render the audio for columns that have changed. """
     global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_ON
@@ -164,7 +325,8 @@ def render():
         
         # Add a small delay to prevent high CPU usage
         time.sleep(0.01)  # Sleep for 10 milliseconds to reduce CPU load
-                
+
+                    
 def load_n_samples(folder_path, n):
     wav_files = sorted([f for f in os.listdir(folder_path) if f.endswith('.wav')])[:n]
     samples = [sa.WaveObject.from_wave_file(os.path.join(folder_path, wav_file)) for wav_file in wav_files]
@@ -181,116 +343,43 @@ def load_n_samples(folder_path, n):
 
     return samples_out
 
-class AsyncI2CController:
-    def __init__(self, address: int = 0x08):
-        self.bus = smbus.SMBus(1)
-        self.address = address
-        self.touch_data = [0, 0]
-        self.current_bpm = 120
-        self._lock = asyncio.Lock()
-        
-    async def read_touch_data(self) -> List[List[int]]:
-        """
-        Read touch data from Arduino and convert to grid format.
-        Returns a 4x20 list where 1 indicates a touched position.
-        """
-        try:
-            async with self._lock:
-                # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
-                data = self.bus.read_i2c_block_data(self.address, 0, 5)
-                
-                touch2 = (data[1] << 8) | data[0]
-                touch1 = (data[3] << 8) | data[2]
-                self.current_bpm = data[4]
 
-                grid = [[0 for _ in range(20)] for _ in range(4)]
+# Main loop with metronome and PID control
+def main_loop(i2c: I2CController):
+    global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_GLOBAL_STEP, BPM, STOPED, SEQUENCER_ON
 
-                bits1 = bin(touch1)[2:].zfill(12)
-                bits2 = bin(touch2)[2:].zfill(12)
-                print("received: ", bits1, bits2, data[4])
+    # Load samples
+    RAW_SAMPLES = load_n_samples("./", SEQUENCE_SAMPLES)
 
-                cols = bits1 + bits2[:7]
-                rows = bits2[8:]
+    # Use BPM from encoder
+    bpm = 120#i2c.get_bpm()
+    delay = d = wait_time = 60/bpm
+    print(f'{60 / delay} bpm')
 
-                for i, c in enumerate(cols):
-                    if int(c) > 0:
-                        grid[0][i] = 1
-
-                return grid
-                
-        except Exception as e:
-            print(f"I2C read error: {e}")
-            return [[0 for _ in range(20)] for _ in range(4)]
-    
-    async def send_position(self, position: int):
-        """Send current sequencer position to Arduino for LED display."""
-        try:
-            async with self._lock:
-                data = (position & 0x3F)
-                print("sending position: ", position, "and data:", data)
-                self.bus.write_i2c_block_data(self.address, 0x01, [data])
-        except Exception as e:
-            print(f"I2C write error (position): {e}")
-    
-    async def send_sample_state(self, track: int, position: int, active: bool):
-        """Send sample state to Arduino for LED display."""
-        try:
-            async with self._lock:
-                data = (track << 6) | (position & 0x3F)
-                self.bus.write_i2c_block_data(self.address, 0x02, [data, 1 if active else 0])
-        except Exception as e:
-            print(f"I2C write error (sample state): {e}")
-
-    def get_bpm(self) -> int:
-        return self.current_bpm
-
-async def update_sequencer_from_touch(i2c: AsyncI2CController, 
-                                    sequencer_on: List[List[int]], 
-                                    sequencer_changed: List[int]):
-    """Continuously update sequencer state based on touch input."""
-    while True:
-        grid = await i2c.read_touch_data()
-        
-        # Update sequencer state based on touch data
-        for row in range(4):
-            for col in range(20):
-                if grid[row][col]:
-                    sequencer_on[row][col] = 1 - sequencer_on[row][col]
-                    sequencer_changed[col] = 1
-                    await i2c.send_sample_state(row, col, sequencer_on[row][col] == 1)
-        
-        # Use asyncio.sleep instead of time.sleep
-        await asyncio.sleep(0.05)
-
-
-async def main_loop(i2c: AsyncI2CController):
-    """Main sequencer loop with metronome and PID control"""
-    # Initialize variables
-    bpm = 120
-    delay = wait_time = 60/120#bpm
+    a = perf_counter()
+    calculated = True
     pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
-    
+
     SEQUENCER_GLOBAL_STEP = 0
     SEQUENCER_ON = [[0 for _ in range(20)] for _ in range(4)]
     SEQUENCER_CHANGED = [0 for _ in range(20)]
     SEQUENCER_AUDIO = [create_silent_wave() for _ in range(20)]
 
-    last_tick = perf_counter()
-    calculated = True
+    STOPED = False
 
-    while True:
+    while not STOPED:
         # Update BPM from encoder
         new_bpm = i2c.get_bpm()
         if new_bpm != bpm:
             bpm = new_bpm
-            delay = 60/120#bpm
+            d = 60/bpm
             print(f'New BPM: {bpm}')
 
-        current_time = perf_counter()
-        time_elapsed = current_time - last_tick
+        b = perf_counter()
+        te = abs(b-a)
 
-        if (time_elapsed > wait_time) or last_tick == 0:
-            last_tick = current_time
+        if (te > wait_time) or a == 0:
+            a = perf_counter()
             
             # Play audio
             SEQUENCER_AUDIO[SEQUENCER_GLOBAL_STEP].play()
@@ -298,20 +387,17 @@ async def main_loop(i2c: AsyncI2CController):
             # Update step
             SEQUENCER_GLOBAL_STEP = (SEQUENCER_GLOBAL_STEP + 1) % SEQUENCE_LENGTH
             
-            # Calculate timing error
-            timing_error = time_elapsed - delay
+            delay = te - d
             calculated = False
             
         else:
             if not calculated:
-                # Send current position to Arduino
-                await i2c.send_position(SEQUENCER_GLOBAL_STEP)
                 
-                # Update PID controller
-                correction = pid.update(timing_error, delay)
-                wait_time = max(0, delay - correction)
+                # Send current position to Arduino
+                i2c.send_position(SEQUENCER_GLOBAL_STEP)
+                correction = pid.update(delay, d)
+                wait_time = max(0, d - correction)
                 calculated = True
-
                 
 
 
@@ -340,7 +426,7 @@ SEQUENCER_GLOBAL_STEP = 0
 SEQUENCER_CHANGED = [0 for _ in range(SEQUENCE_LENGTH)] 
 
 
-async def main():
+def main():
     print(f"Running commit: {get_git_commit_hash()}")
     
     if not is_raspberry_pi():
@@ -349,21 +435,21 @@ async def main():
     
     print("Running on a Raspberry Pi.")
 
-    i2c = AsyncI2CController()
+    i2c = I2CController()
 
-    # Create tasks for both the sequencer and touch input
-    touch_task = asyncio.create_task(
-        update_sequencer_from_touch(
-            i2c, 
-            SEQUENCER_ON, 
-            SEQUENCER_CHANGED
-        )
-    )
-    
-    main_task = asyncio.create_task(main_loop(i2c))
+    # Start the audio rendering thread
+    sound_thread = threading.Thread(target=render)
+    sound_thread.daemon = True
+    sound_thread.start()
 
-    # Wait for both tasks
-    await asyncio.gather(touch_task, main_task)
+    # Start the touch input thread
+    touch_thread = threading.Thread(target=update_sequencer_from_touch, 
+                                  args=(i2c, SEQUENCER_ON, SEQUENCER_CHANGED))
+    touch_thread.daemon = True
+    touch_thread.start()
+
+    # Start the main loop
+    main_loop(i2c)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
