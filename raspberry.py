@@ -165,7 +165,7 @@ class I2CController:
         try:
             with self._lock:
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 1)
-                print(data)
+                self.current_bpm = data[0]
 
         except Exception as e:
             print(f"I2C write error (position): {e}")
@@ -373,16 +373,17 @@ def main_loop(i2c: I2CController):
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
+                new_bpm = i2c.get_bpm()
+                if new_bpm != bpm:
+                    bpm = new_bpm
+                    d = 60/bpm
+                    print(f'New BPM: {bpm}')
                 
             # TODO: DO LIKE A MODULO HERE TO UPDATE STUFF (every 50 th wait or smth)
             #         - like update bpm
             #         - like recieve touch update, send 8 Byte display update
             # Update BPM from encoder
-            new_bpm = i2c.get_bpm()
-            if new_bpm != bpm:
-                bpm = new_bpm
-                d = 60/120#bpm
-                print(f'New BPM: {bpm}')
+            
 
 
 
