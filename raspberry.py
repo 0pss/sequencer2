@@ -62,6 +62,17 @@ class I2CController:
                 print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
 
+        except Exception as e:
+            print(f"I2C write error (position): {e}")
+
+        def get_sens(self):
+        """
+        Send current sequencer position to Arduino for LED display.
+        track: 0-3
+        position: 0-19
+        """
+        try:
+            with self._lock:
                 # Read 5 bytes: 4 for touch data (2 per MPR121) + 1 for BPM
                 data = self.bus.read_i2c_block_data(self.address, 0, 5)
                 
@@ -104,7 +115,7 @@ class I2CController:
                         print(row, "\n")
                     print("====")
         except Exception as e:
-            print(f"I2C write error (position): {e}")
+            print(f"I2C write error (sens): {e}")
 
     def get_bpm(self) -> int:
         """Returns the current BPM value from the rotary encoder."""
@@ -304,11 +315,12 @@ def main_loop(i2c: I2CController):
                 
                 # Send current position to Arduino
                 i2c.send_position(SEQUENCER_GLOBAL_STEP)
+                i2c.get_sens()
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
                 
-
+            i2c.get_sens()
 
 
 
