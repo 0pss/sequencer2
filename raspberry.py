@@ -62,6 +62,9 @@ class I2CController:
                 print("sending position: ", position, "and data:", data)
                 self.bus.write_i2c_block_data(self.address, 0x01, [data])
 
+                self.bus.write_i2c_block_data(self.address, 0x02, [])
+
+
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
@@ -288,12 +291,7 @@ def main_loop(i2c: I2CController):
     STOPED = False
 
     while not STOPED:
-        # Update BPM from encoder
-        new_bpm = i2c.get_bpm()
-        if new_bpm != bpm:
-            bpm = new_bpm
-            d = 60/120#bpm
-            print(f'New BPM: {bpm}')
+        
 
         b = perf_counter()
         te = abs(b-a)
@@ -312,6 +310,8 @@ def main_loop(i2c: I2CController):
             
         else:
             if not calculated:
+
+                
                 
                 # Send current position to Arduino
                 i2c.send_position(SEQUENCER_GLOBAL_STEP)
@@ -320,7 +320,15 @@ def main_loop(i2c: I2CController):
                 wait_time = max(0, d - correction)
                 calculated = True
                 
-
+            # TODO: DO LIKE A MODULO HERE TO UPDATE STUFF (every 50 th wait or smth)
+            #         - like update bpm
+            #         - like recieve touch update, send 8 Byte display update
+            # Update BPM from encoder
+            new_bpm = i2c.get_bpm()
+            if new_bpm != bpm:
+                bpm = new_bpm
+                d = 60/120#bpm
+                print(f'New BPM: {bpm}')
 
 
 
