@@ -165,9 +165,9 @@ class I2CController:
         try:
             with self._lock:
                 # Read the 4 data bytes
-                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
+                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 5)
                 print(data)
-                print("{0:b}".format(data))
+                print(bin(data))
                 # Reconstruct the long value from the 4 data bytes
                 bpm_change = struct.unpack('L', bytes(data))[0]   
 
