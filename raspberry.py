@@ -170,9 +170,9 @@ class I2CController:
 
                 #### BPM ##############
                 # Read the 4 data bytes using read_word_data
-                high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
+                #high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
                 
-                print(high_byte)
+                #print(high_byte)
                 self.current_bpm = 120 + 0
 
                 #### END BPM ###########
@@ -382,6 +382,7 @@ def main_loop(i2c: I2CController):
                 i2c.print_touched_inputs()  
                 i2c.get_bpm()
                 new_bpm = i2c.current_bpm
+
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
