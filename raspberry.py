@@ -181,13 +181,13 @@ class I2CController:
                 for k in range(msg.len):
                     mes.append(msg.buf[k])
 
-                print(mes)
-
                 # Concatenate the byte objects into a single bytes object
                 mes_bytes = b''.join(mes)
 
                 # Now you can safely use int.from_bytes() with byteorder='little'
                 result = int.from_bytes(mes_bytes, byteorder='little')
+
+                print(result)
 
                 self.current_bpm = 120 + result
 
