@@ -163,7 +163,7 @@ class I2CController:
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
-    def get_bpm(self) -> int:
+    def get_bpm(self):
         """Returns the current BPM value from the rotary encoder."""
         try:
             with self._lock:
@@ -181,9 +181,6 @@ class I2CController:
         except Exception as e:
             print(f"I2C write error (bpm): {e}")
 
-
-        
-        return self.current_bpm
 
     def __del__(self):
         """Clean up the SMBus connection when the object is destroyed."""
@@ -383,8 +380,8 @@ def main_loop(i2c: I2CController):
                 # Send current position to Arduino
                 i2c.send_position(SEQUENCER_GLOBAL_STEP)
                 i2c.print_touched_inputs()  
-                new_bpm = i2c.get_bpm()
-               
+                i2c.get_bpm()
+                new_bpm = i2c.current_bpm
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
