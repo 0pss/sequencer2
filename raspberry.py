@@ -170,7 +170,7 @@ class I2CController:
                 
                 # Convert 4 bytes to a long integer
                 print(bytes(data))
-                self.current_bpm = struct.unpack('<L', bytes(data))[0]  # '<l' is for little-endian long
+                self.current_bpm = struct.unpack('>L', bytes(data))[0]  # '<l' is for little-endian long
                 
                 print("Received BPM:", self.current_bpm)
                 return self.current_bpm
