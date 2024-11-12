@@ -165,14 +165,14 @@ class I2CController:
         try:
             with self._lock:
                 # Read the 4 data bytes
-                #data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
+                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
 
                 # Reconstruct the long value from the 4 data bytes
-                #bpm_change = struct.unpack('<L', bytes(data))[0]   
-                #if data[3] > 0:
-                 #   bpm_change -= 2**32
+                bpm_change = struct.unpack('<L', bytes(data))[0]   
+                if data[3] > 0:
+                    bpm_change -= 2**32
 
-                self.current_bpm = 120 #+ bpm_change
+                self.current_bpm = 120 + bpm_change
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
