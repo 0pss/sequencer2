@@ -165,9 +165,9 @@ class I2CController:
         try:
             with self._lock:
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 1)
-                print("recieved BPM: ", data[0])
+                print("recieved BPM: ", 120 + data[0])
                 #TODO Somethings fishy here
-                self.current_bpm = data[0]
+                self.current_bpm = 120 + data[0]
         except Exception as e:
             print(f"I2C write error (position): {e}")
 

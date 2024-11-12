@@ -35,7 +35,8 @@ Track tracks[4] = {
 };
 
 
-long currentBPM = 120;
+int currentBPM = 120;
+int BPM_CHANGE = 0;
 
 // Define a struct for task scheduling
 typedef struct {
@@ -108,7 +109,7 @@ void update_leds() {
 void setup() {
     delay(1000);
 
-    Serial.begin(115200);
+    //Serial.begin(115200);
     Wire.begin(I2C_SLAVE_ADDRESS);
     Wire.onReceive(receiveEvent);
     Wire.onRequest(requestEvent);
@@ -120,7 +121,7 @@ void setup() {
     pinMode(3, INPUT_PULLUP);
 
     // Schedule initial sensor and encoder tasks
-    addToTick(millis() + 10, serviceEncoder);
+    addToTick(millis() + 5, serviceEncoder);
     addToTick(millis() + 250, update_leds);
 
 }
@@ -135,16 +136,14 @@ void loop() {
     }
 
     // Re-schedule sensor and encoder reads
-    addToTick(millis() + 10, serviceEncoder);
+    addToTick(millis() + 5, serviceEncoder);
     addToTick(millis() + 250, update_leds);
 
     delay(10); // Small delay to avoid busy-waiting 
   
         if (newPosition != oldPosition) {
+          BPM_CHANGE = newPosition;
           oldPosition = newPosition;
-          Serial.print("BPM: ");
-          Serial.println(currentBPM + newPosition);
-          currentBPM =+ newPosition;
         }
         
 
@@ -165,5 +164,6 @@ void receiveEvent(int howMany) {
 
 void requestEvent() {
 
-    Wire.write((byte*)&currentBPM, sizeof(currentBPM)); // Send all 4 bytes of the long
+    Wire.write((byte)BPM_CHANGE);
+
 }
