@@ -370,7 +370,7 @@ def main_loop(i2c: I2CController):
 
     SEQUENCER_GLOBAL_STEP = 0
     SEQUENCER_ON = [[1 for _ in range(20)]] + [[0 for _ in range(20)] for _ in range(3)]
-    SEQUENCER_CHANGED = [0 for _ in range(20)]
+    SEQUENCER_CHANGED = [1 for _ in range(20)]
     SEQUENCER_AUDIO = [create_silent_wave() for _ in range(20)]
 
     STOPED = False
