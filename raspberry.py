@@ -153,9 +153,6 @@ class I2CController:
         """
         try:
             with self._lock:
-                data = (position & 0x3F)  # Ensure position is within 6-bit range
-                print(f"sending position: {position} and data: {data}")
-                self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
 
                 # Read the 4 data bytes
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
@@ -165,6 +162,12 @@ class I2CController:
                     bpm_change -= 2**32
 
                 self.current_bpm = 120 + bpm_change
+
+                data = (position & 0x3F)  # Ensure position is within 6-bit range
+                print(f"sending position: {position} and data: {data}")
+                self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
+
+                
 
         except Exception as e:
             print(f"I2C write error (position): {e}")
