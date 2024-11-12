@@ -6,6 +6,7 @@ import busio
 import subprocess
 from typing import Tuple
 import smbus2 as smbus
+from smbus2 import i2c_msg
 import threading
 import time
 from time import perf_counter
@@ -172,7 +173,7 @@ class I2CController:
                 # Read the 4 data bytes using read_word_data
                 #high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
 
-                msg = self.bus.read(self.arduino_address, 2)
+                msg = i2c_msg.read(self.arduino_address, 2)
                 self.bus.i2c_rdwr(msg)
                 
                 #print(high_byte)
