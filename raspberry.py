@@ -114,6 +114,7 @@ class I2CController:
             raise
 
     
+
     def read_touch_sensors(self) -> Tuple[list, list]:
         """Read the status of all inputs from both MPR121 sensors."""
         try:
@@ -123,8 +124,7 @@ class I2CController:
                 read_msg2 = i2c_msg.read(self.mpr121_address2, 2)  # 2 bytes for status
 
                 # Perform the I2C read operation in one go
-                with self.bus:
-                    self.bus.i2c_rdwr(read_msg1, read_msg2)
+                self.bus.i2c_rdwr(read_msg1, read_msg2)
 
                 # Extract the data from the read messages
                 status1 = int.from_bytes(list(read_msg1), byteorder='little')  # Convert to integer
@@ -139,6 +139,8 @@ class I2CController:
         except IOError as e:
             print(f"Error reading touch sensors: {e}")
             return [False] * 12, [False] * 12
+    
+    
     def print_touched_inputs(self):
         """Print which inputs are currently being touched on both sensors."""
         sensor1_status, sensor2_status = self.read_touch_sensors()
