@@ -165,6 +165,9 @@ class I2CController:
         try:
             with self._lock:
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 1)
+
+                print(data)
+
                 bpm_change = struct.unpack('b', bytes(data))[0]  # 'b' is for signed 8-bit
                 
                 print("recieved BPM: ", 120 + bpm_change)
