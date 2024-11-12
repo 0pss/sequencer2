@@ -120,7 +120,6 @@ class I2CController(threading.Thread):
         """Main thread loop - continuously updates sensor data and BPM."""
         while self.running:
             try:
-                print("HERE")
                 # Update touch sensors
                 with self._lock:
                     status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
@@ -146,7 +145,7 @@ class I2CController(threading.Thread):
             except Exception as e:
                 print(f"Error in I2C thread: {e}")
             
-            sleep(0.01)  # Small delay to prevent busy-waiting
+            sleep(0.1)  # Small delay to prevent busy-waiting
 
     def read_touch_sensors(self) -> Tuple[list, list]:
         """Non-blocking read of touch sensor status."""
@@ -330,7 +329,7 @@ def main_loop(i2c: I2CController):
     RAW_SAMPLES = load_n_samples("./", SEQUENCE_SAMPLES)
 
     # Use BPM from encoder
-    bpm = 60#i2c.get_bpm()
+    bpm = 120#i2c.get_bpm()
     delay = d = wait_time = 60/bpm
     print(f'{60 / delay} bpm')
 
