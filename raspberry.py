@@ -168,9 +168,9 @@ class I2CController:
                 # Read 4 bytes to receive the full `long` value
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
                 
-                # Convert 4 bytes to a long integer
-                print(bytes(data))
-                self.current_bpm = struct.unpack('>L', bytes(data))[0]  # '<l' is for little-endian long
+                # Interpret the received data as a big-endian unsigned long
+                self.current_bpm = struct.unpack('<L', bytes(data))[0]  # '>L' is for big-endian unsigned long
+            
                 
                 print("Received BPM:", self.current_bpm)
                 return self.current_bpm
