@@ -35,7 +35,6 @@ Track tracks[4] = {
 };
 
 
-int currentBPM = 120;
 int BPM_CHANGE = 0;
 
 // Define a struct for task scheduling
@@ -109,7 +108,7 @@ void update_leds() {
 void setup() {
     delay(1000);
 
-    //Serial.begin(115200);
+    Serial.begin(115200);
     Wire.begin(I2C_SLAVE_ADDRESS);
     Wire.onReceive(receiveEvent);
     Wire.onRequest(requestEvent);
@@ -141,10 +140,11 @@ void loop() {
 
     delay(10); // Small delay to avoid busy-waiting 
   
-        if (newPosition != oldPosition) {
+    if (newPosition != oldPosition) {
           BPM_CHANGE = newPosition;
           oldPosition = newPosition;
-        }
+          Serial.println(BPM_CHANGE);
+    }
         
 
 }
