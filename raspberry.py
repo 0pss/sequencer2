@@ -9,7 +9,7 @@ import smbus2 as smbus
 from smbus2 import SMBus, i2c_msg
 import threading
 import time
-from time import perf_counter
+from time import perf_counter, sleep
 import numpy as np
 import simpleaudio as sa
 import struct
