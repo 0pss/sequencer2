@@ -14,8 +14,6 @@ import numpy as np
 import simpleaudio as sa
 import struct
 from typing import List, Tuple
-import queue
-from collections import deque
 
 
 
@@ -43,8 +41,7 @@ def get_git_commit_hash() -> str:
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
 
-
-class ThreadedI2CController:
+class I2CController(threading.Thread):
     # MPR121 Register addresses
     TOUCH_STATUS_REG = 0x00
     ELE_CFG_REG = 0x5E
@@ -68,148 +65,99 @@ class ThreadedI2CController:
     AUTO_CONFIG_0 = 0x7B
     AUTO_CONFIG_1 = 0x7C
 
-
     def __init__(self, arduino_address: int = 0x08, bus_number: int = 1):
-        """Initialize the threaded I2C controller."""
+        """Initialize the I2C controller thread."""
+        threading.Thread.__init__(self, daemon=True)
+        
+        # I2C setup
         self.bus_number = bus_number
         self.arduino_address = arduino_address
         self.mpr121_address1 = 0x5A
         self.mpr121_address2 = 0x5B
-        self.current_bpm = 120
-        self.running = True
-        
-        # Thread-safe queues and cache
-        self.command_queue = queue.Queue()
-        self.touch_data_cache = {'sensor1': [False] * 12, 'sensor2': [False] * 12}
-        self.bpm_cache = 120
-        self._lock = threading.Lock()
-        
-        # Separate queues for read operations
-        self.touch_data_queue = queue.Queue(maxsize=1)  # Only keep latest reading
-        self.bpm_queue = queue.Queue(maxsize=1)  # Only keep latest reading
-        
-        # Initialize bus in the main thread
         self.bus = SMBus(self.bus_number)
         
-        # Start worker thread
-        self.i2c_thread = threading.Thread(target=self._i2c_worker)
-        self.i2c_thread.daemon = True
-        self.i2c_thread.start()
+        # State variables
+        self.current_bpm = 120
+        self.running = True
+        self.touch_data = {'sensor1': [False] * 12, 'sensor2': [False] * 12}
+        self._lock = threading.Lock()
         
-        # Start continuous reading threads
-        self.touch_thread = threading.Thread(target=self._continuous_touch_read)
-        self.touch_thread.daemon = True
-        self.touch_thread.start()
+        # Initialize MPR121 sensors
+        self._init_mpr121(self.mpr121_address1)
+        self._init_mpr121(self.mpr121_address2)
         
-        self.bpm_thread = threading.Thread(target=self._continuous_bpm_read)
-        self.bpm_thread.daemon = True
-        self.bpm_thread.start()
-        
-        # Queue MPR121 initialization
-        self.command_queue.put((self._init_mpr121, (self.mpr121_address1,)))
-        self.command_queue.put((self._init_mpr121, (self.mpr121_address2,)))
+        # Start the thread
+        self.start()
 
-    def _continuous_touch_read(self):
-        """Continuously read touch sensors in background."""
+    def _init_mpr121(self, address):
+        """Initialize a single MPR121 sensor with default configuration."""
+        try:
+            with self._lock:
+                # Soft reset
+                self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x00)
+                
+                # Configure touch and release thresholds
+                for i in range(12):
+                    self.bus.write_byte_data(address, self.ELE0_T + i*2, 12)
+                    self.bus.write_byte_data(address, self.ELE0_R + i*2, 6)
+                
+                # Configure baseline filtering
+                self.bus.write_byte_data(address, self.MHD_R, 0x01)
+                self.bus.write_byte_data(address, self.NHD_R, 0x01)
+                self.bus.write_byte_data(address, self.NCL_R, 0x00)
+                self.bus.write_byte_data(address, self.FDL_R, 0x00)
+                
+                # Enable electrodes and auto configuration
+                self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x0C)
+                self.bus.write_byte_data(address, self.AUTO_CONFIG_0, 0x0B)
+                self.bus.write_byte_data(address, self.AUTO_CONFIG_1, 0x9F)
+                
+        except IOError as e:
+            print(f"Error initializing MPR121 at address 0x{address:02X}: {e}")
+            raise
+
+    def run(self):
+        """Main thread loop - continuously updates sensor data and BPM."""
         while self.running:
             try:
+                # Update touch sensors
                 with self._lock:
                     status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
                     status2 = self.bus.read_word_data(self.mpr121_address2, self.TOUCH_STATUS_REG)
                 
-                sensor1_status = [(status1 & (1 << i)) != 0 for i in range(12)]
-                sensor2_status = [(status2 & (1 << i)) != 0 for i in range(12)]
+                self.touch_data['sensor1'] = [(status1 & (1 << i)) != 0 for i in range(12)]
+                self.touch_data['sensor2'] = [(status2 & (1 << i)) != 0 for i in range(12)]
                 
-                # Update cache
-                self.touch_data_cache['sensor1'] = sensor1_status
-                self.touch_data_cache['sensor2'] = sensor2_status
-                
-                # Update queue (non-blocking)
-                try:
-                    self.touch_data_queue.get_nowait()  # Remove old data
-                except queue.Empty:
-                    pass
-                self.touch_data_queue.put((sensor1_status, sensor2_status))
-                
-            except Exception as e:
-                print(f"Error reading touch sensors: {e}")
-            sleep(0.01)  # Small delay to prevent busy-waiting
-
-    def _continuous_bpm_read(self):
-        """Continuously read BPM in background."""
-        while self.running:
-            try:
+                # Update BPM
                 with self._lock:
                     msg = i2c_msg.read(self.arduino_address, 2)
                     self.bus.i2c_rdwr(msg)
                     
-                    mes = []
-                    for k in range(msg.len):
-                        mes.append(msg.buf[k])
-
+                    mes = [msg.buf[k] for k in range(msg.len)]
                     mes_bytes = b''.join(mes)
                     result = int.from_bytes(mes_bytes, byteorder='little')
-
+                    
                     if result > 2**14:
                         result -= 2**16
-
-                    new_bpm = 120 + result
                     
-                    # Update cache
-                    self.bpm_cache = new_bpm
-                    
-                    # Update queue (non-blocking)
-                    try:
-                        self.bpm_queue.get_nowait()  # Remove old data
-                    except queue.Empty:
-                        pass
-                    self.bpm_queue.put(new_bpm)
-                    
+                    self.current_bpm = 120 + result
+                
             except Exception as e:
-                print(f"Error reading BPM: {e}")
-            sleep(0.1)  # Reasonable delay for BPM updates
+                print(f"Error in I2C thread: {e}")
+            
+            sleep(0.01)  # Small delay to prevent busy-waiting
 
     def read_touch_sensors(self) -> Tuple[list, list]:
-        """
-        Non-blocking read of touch sensor status.
-        Returns the most recent sensor readings from cache.
-        """
-        return (self.touch_data_cache['sensor1'][:], 
-                self.touch_data_cache['sensor2'][:])
+        """Non-blocking read of touch sensor status."""
+        return (self.touch_data['sensor1'][:], 
+                self.touch_data['sensor2'][:])
 
     def get_bpm(self) -> int:
-        """
-        Non-blocking read of current BPM.
-        Returns the most recent BPM reading from cache.
-        """
-        return self.bpm_cache
-
-    def await_next_touch_data(self, timeout=1.0) -> Tuple[list, list]:
-        """
-        Blocking wait for next touch sensor reading.
-        Returns: Tuple of sensor1 and sensor2 status lists
-        """
-        try:
-            return self.touch_data_queue.get(timeout=timeout)
-        except queue.Empty:
-            return self.read_touch_sensors()  # Return cached data if timeout
-
-    def await_next_bpm(self, timeout=1.0) -> int:
-        """
-        Blocking wait for next BPM reading.
-        Returns: Current BPM value
-        """
-        try:
-            return self.bpm_queue.get(timeout=timeout)
-        except queue.Empty:
-            return self.get_bpm()  # Return cached data if timeout
+        """Non-blocking read of current BPM."""
+        return self.current_bpm
 
     def send_position(self, position: int):
-        """Queue position update to Arduino for LED display."""
-        self.command_queue.put((self._send_position, (position,)))
-
-    def _send_position(self, position: int):
-        """Internal method to send position to Arduino."""
+        """Send position update to Arduino for LED display."""
         try:
             with self._lock:
                 data = position & 0x3F
@@ -219,16 +167,15 @@ class ThreadedI2CController:
             print(f"I2C write error (position): {e}")
 
     def stop(self):
-        """Stop all threads and clean up."""
+        """Stop the I2C thread and clean up."""
         self.running = False
-        self.i2c_thread.join()
-        self.touch_thread.join()
-        self.bpm_thread.join()
+        self.join()
         self.bus.close()
 
     def __del__(self):
         """Ensure proper cleanup on object destruction."""
-        self.stop()
+        if hasattr(self, 'running') and self.running:
+            self.stop()
 
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
@@ -375,7 +322,7 @@ def load_n_samples(folder_path, n):
 
 
 # Main loop with metronome and PID control
-def main_loop(i2c: ThreadedI2CController):
+def main_loop(i2c: I2CController):
     global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_GLOBAL_STEP, BPM, STOPED, SEQUENCER_ON
 
     # Load samples
@@ -474,7 +421,7 @@ def main():
     
     print("Running on a Raspberry Pi.")
 
-    i2c = ThreadedI2CController()
+    i2c = I2CController()
 
     # Start the audio rendering thread
     sound_thread = threading.Thread(target=render)
