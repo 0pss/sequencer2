@@ -165,6 +165,23 @@ class I2CController:
 
     def get_bpm(self) -> int:
         """Returns the current BPM value from the rotary encoder."""
+        try:
+            with self._lock:
+
+                #### BPM ##############
+                # Read the 4 data bytes using read_word_data
+                high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
+                
+                print(high_byte)
+                self.current_bpm = 120 + 0
+
+                #### END BPM ###########
+
+            
+        except Exception as e:
+            print(f"I2C write error (bpm): {e}")
+
+
         
         return self.current_bpm
 
@@ -365,7 +382,9 @@ def main_loop(i2c: I2CController):
                 
                 # Send current position to Arduino
                 i2c.send_position(SEQUENCER_GLOBAL_STEP)
-                i2c.print_touched_inputs()                
+                i2c.print_touched_inputs()  
+                new_bpm = i2c.get_bpm()
+               
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
@@ -374,7 +393,7 @@ def main_loop(i2c: I2CController):
             #         - like update bpm
             #         - like recieve touch update, send 8 Byte display update
             # Update BPM from encoder
-                new_bpm = i2c.get_bpm()
+                #new_bpm = i2c.get_bpm()
                 if new_bpm != bpm:
                     bpm = new_bpm
                     d = 60/np.max([bpm,1])
