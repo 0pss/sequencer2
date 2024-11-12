@@ -124,16 +124,7 @@ class I2CController:
             sensor1_status = [(status1 & (1 << i)) != 0 for i in range(12)]
             sensor2_status = [(status2 & (1 << i)) != 0 for i in range(12)]
             
-            #### BPM ##############
-            # Read the 4 data bytes using read_word_data
-            high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
             
-            print(high_byte)
-            self.current_bpm = 120 + 0
-
-            #### END BPM ###########
-
-
             return sensor1_status, sensor2_status
             
         except IOError as e:
