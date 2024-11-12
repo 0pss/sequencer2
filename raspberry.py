@@ -14,6 +14,8 @@ import numpy as np
 import simpleaudio as sa
 import struct
 from typing import List, Tuple
+import queue
+from collections import deque
 
 
 
@@ -41,14 +43,6 @@ def get_git_commit_hash() -> str:
     except Exception as e:
         return f"Error retrieving Git commit hash: {e}"
 
-
-import threading
-import queue
-import smbus
-from typing import Tuple, Callable
-from smbus2 import SMBus, i2c_msg
-from time import sleep
-from collections import deque
 
 class ThreadedI2CController:
     # [Previous register definitions remain the same]
@@ -213,7 +207,7 @@ class ThreadedI2CController:
     def __del__(self):
         """Ensure proper cleanup on object destruction."""
         self.stop()
-        
+
 class PIDController:
     def __init__(self, Kp, Ki, Kd):
         self.Kp = Kp
