@@ -168,8 +168,7 @@ class I2CController:
 
                 print(data)
 
-                bpm_change = struct.unpack('b', bytes(data))[0]  # 'b' is for signed 8-bit
-                
+                bpm_change = struct.unpack('b', bytes([data[0]]))[0]  # 'b' is for signed 8-bit                
                 print("recieved BPM: ", 120 + bpm_change)
                 #TODO Somethings fishy here
                 self.current_bpm = 120 + bpm_change
