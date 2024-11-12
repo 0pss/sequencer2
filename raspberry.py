@@ -45,7 +45,29 @@ def get_git_commit_hash() -> str:
 
 
 class ThreadedI2CController:
-    # [Previous register definitions remain the same]
+    # MPR121 Register addresses
+    TOUCH_STATUS_REG = 0x00
+    ELE_CFG_REG = 0x5E
+    MHD_R = 0x2B
+    NHD_R = 0x2C
+    NCL_R = 0x2D
+    FDL_R = 0x2E
+    MHD_F = 0x2F
+    NHD_F = 0x30
+    NCL_F = 0x31
+    FDL_F = 0x32
+    NHDT = 0x33
+    NCLT = 0x34
+    FDLT = 0x35
+    MHDF = 0x36
+    NHDF = 0x37
+    NCLF = 0x38
+    FDLF = 0x39
+    ELE0_T = 0x41
+    ELE0_R = 0x42
+    AUTO_CONFIG_0 = 0x7B
+    AUTO_CONFIG_1 = 0x7C
+
 
     def __init__(self, arduino_address: int = 0x08, bus_number: int = 1):
         """Initialize the threaded I2C controller."""
@@ -452,7 +474,7 @@ def main():
     
     print("Running on a Raspberry Pi.")
 
-    i2c = I2CController()
+    i2c = ThreadedI2CController()
 
     # Start the audio rendering thread
     sound_thread = threading.Thread(target=render)
