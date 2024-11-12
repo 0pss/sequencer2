@@ -157,24 +157,21 @@ class I2CController:
                 print(f"sending position: {position} and data: {data}")
                 self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
 
+                # Read the 4 data bytes
+                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
+                # Reconstruct the long value from the 4 data bytes
+                bpm_change = struct.unpack('<L', bytes(data))[0]   
+                if data[3] > 0:
+                    bpm_change -= 2**32
+
+                self.current_bpm = 120 + bpm_change
+
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
     def get_bpm(self) -> int:
         """Returns the current BPM value from the rotary encoder."""
-        try:
-            with self._lock:
-                # Read the 4 data bytes
-                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
-            # Reconstruct the long value from the 4 data bytes
-            bpm_change = struct.unpack('<L', bytes(data))[0]   
-            if data[3] > 0:
-                bpm_change -= 2**32
-
-            self.current_bpm = 120 + bpm_change
-        except Exception as e:
-            print(f"I2C write error (position): {e}")
-
+        
         return self.current_bpm
 
     def __del__(self):
