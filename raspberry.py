@@ -113,25 +113,32 @@ class I2CController:
             print(f"Error initializing MPR121 at address 0x{address:02X}: {e}")
             raise
 
+    
     def read_touch_sensors(self) -> Tuple[list, list]:
         """Read the status of all inputs from both MPR121 sensors."""
         try:
             with self._lock:
-                # Read touch status registers (2 bytes each sensor)
-                status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
-                status2 = self.bus.read_word_data(self.mpr121_address2, self.TOUCH_STATUS_REG)
-                
+                # Create two read messages, one for each MPR121 sensor's status register
+                read_msg1 = i2c_msg.read(self.mpr121_address1, 2)  # 2 bytes for status
+                read_msg2 = i2c_msg.read(self.mpr121_address2, 2)  # 2 bytes for status
+
+                # Perform the I2C read operation in one go
+                with self.bus:
+                    self.bus.i2c_rdwr(read_msg1, read_msg2)
+
+                # Extract the data from the read messages
+                status1 = int.from_bytes(list(read_msg1), byteorder='little')  # Convert to integer
+                status2 = int.from_bytes(list(read_msg2), byteorder='little')  # Convert to integer
+
             # Convert to list of boolean values for each electrode
             sensor1_status = [(status1 & (1 << i)) != 0 for i in range(12)]
             sensor2_status = [(status2 & (1 << i)) != 0 for i in range(12)]
-            
             
             return sensor1_status, sensor2_status
             
         except IOError as e:
             print(f"Error reading touch sensors: {e}")
             return [False] * 12, [False] * 12
-
     def print_touched_inputs(self):
         """Print which inputs are currently being touched on both sensors."""
         sensor1_status, sensor2_status = self.read_touch_sensors()
