@@ -375,7 +375,7 @@ def load_n_samples(folder_path, n):
 
 
 # Main loop with metronome and PID control
-def main_loop(i2c: I2CController):
+def main_loop(i2c: ThreadedI2CController):
     global SEQUENCER_AUDIO, SEQUENCER_CHANGED, RAW_SAMPLES, SEQUENCER_GLOBAL_STEP, BPM, STOPED, SEQUENCER_ON
 
     # Load samples
