@@ -189,14 +189,7 @@ class I2CController:
                 # Now you can safely use int.from_bytes() with byteorder='little'
                 result = int.from_bytes(mes_bytes, byteorder='little')
 
-                print(result)
-
-                # Now you can safely use int.from_bytes() with byteorder='little'
-                result = int.from_bytes(mes_bytes, byteorder='big')
-
-                print(result)
-
-                self.current_bpm = 120 + 0
+                self.current_bpm = 120 + result
 
                 #### END BPM ###########
 
