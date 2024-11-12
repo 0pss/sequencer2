@@ -168,7 +168,7 @@ class I2CController:
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
                 print(data)
                 # Reconstruct the long value from the 4 data bytes
-                bpm_change = struct.unpack('>L', bytes(data))[0]   
+                bpm_change = struct.unpack('<L', bytes(data))[0]   
 
                 print("recieved BPM: ", 120 + bpm_change)
                 #TODO Somethings fishy here
