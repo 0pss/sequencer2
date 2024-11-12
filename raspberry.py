@@ -184,6 +184,8 @@ class I2CController:
                 # Concatenate the byte objects into a single bytes object
                 mes_bytes = b''.join(mes)
 
+                print(mes)
+
                 # Now you can safely use int.from_bytes() with byteorder='little'
                 result = int.from_bytes(mes_bytes, byteorder='little')
 
