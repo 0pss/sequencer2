@@ -124,6 +124,17 @@ class I2CController:
             sensor1_status = [(status1 & (1 << i)) != 0 for i in range(12)]
             sensor2_status = [(status2 & (1 << i)) != 0 for i in range(12)]
             
+
+            # Read the 4 data bytes
+            data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
+            # Reconstruct the long value from the 4 data bytes
+            bpm_change = struct.unpack('<L', bytes(data))[0]   
+            if data[3] > 0:
+                bpm_change -= 2**32
+
+            self.current_bpm = 120 + bpm_change
+
+
             return sensor1_status, sensor2_status
             
         except IOError as e:
