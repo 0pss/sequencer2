@@ -120,6 +120,7 @@ class I2CController(threading.Thread):
         """Main thread loop - continuously updates sensor data and BPM."""
         while self.running:
             try:
+                print("HERE")
                 # Update touch sensors
                 with self._lock:
                     status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
