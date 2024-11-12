@@ -388,7 +388,7 @@ def main_loop(i2c: I2CController):
                 new_bpm = i2c.get_bpm()
                 if new_bpm != bpm:
                     bpm = new_bpm
-                    d = 60/120#bpm
+                    d = 60/np.max(bpm,1)
                     print(f'New BPM: {bpm}')
 
 
