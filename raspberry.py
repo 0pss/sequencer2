@@ -177,7 +177,8 @@ class I2CController:
                 self.bus.i2c_rdwr(msg)
                 
                 #print(high_byte)
-                print(bin(msg))
+                for k in range(msg.len):
+                    print(msg.buf[k], type(msg), type(msg.buf[k]))
                 self.current_bpm = 120 + 0
 
                 #### END BPM ###########
