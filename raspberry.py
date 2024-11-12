@@ -160,26 +160,14 @@ class I2CController:
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
-
     def get_bpm(self) -> int:
         """Returns the current BPM value from the rotary encoder."""
         try:
             with self._lock:
-                # Read 4 bytes to receive the full `long` value
-                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
-
-                print(data)
-                print(struct.unpack('<L', bytes(data))[0] )
-                print(struct.unpack('>L', bytes(data))[0] )
-                print(struct.unpack('<l', bytes(data))[0] )
-                print(struct.unpack('>l', bytes(data))[0] )
-                
-                # Interpret the received data as a big-endian unsigned long
-                self.current_bpm = struct.unpack('<L', bytes(data))[0]  # '>L' is for big-endian unsigned long
-            
-                
-                print("Received BPM:", self.current_bpm)
-                return self.current_bpm
+                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 1)
+                print("recieved BPM: ", data[0])
+                #TODO Somethings fishy here
+                self.current_bpm = data[0]
         except Exception as e:
             print(f"I2C write error (position): {e}")
 
