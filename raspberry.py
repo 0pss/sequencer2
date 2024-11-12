@@ -334,7 +334,7 @@ def main_loop(i2c: I2CController):
     RAW_SAMPLES = load_n_samples("./", SEQUENCE_SAMPLES)
 
     # Use BPM from encoder
-    bpm = 120#i2c.get_bpm()
+    bpm = 60#i2c.get_bpm()
     delay = d = wait_time = 60/bpm
     print(f'{60 / delay} bpm')
 
