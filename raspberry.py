@@ -169,6 +169,7 @@ class I2CController:
                 data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
                 
                 # Convert 4 bytes to a long integer
+                print(bytes(data))
                 self.current_bpm = struct.unpack('<l', bytes(data))[0]  # '<l' is for little-endian long
                 
                 print("Received BPM:", self.current_bpm)
