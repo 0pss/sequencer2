@@ -164,6 +164,17 @@ void receiveEvent(int howMany) {
 
 void requestEvent() {
 
-    Wire.write((byte)BPM_CHANGE);
+    long bpmValue = newPosition; // Example long value
 
+    // Split the long into individual bytes
+    byte byte1 = (byte)(bpmValue & 0xFF);
+    byte byte2 = (byte)((bpmValue >> 8) & 0xFF);
+    byte byte3 = (byte)((bpmValue >> 16) & 0xFF);
+    byte byte4 = (byte)((bpmValue >> 24) & 0xFF);
+
+    // Send the bytes one by one
+    Wire.write(byte1);
+    Wire.write(byte2);
+    Wire.write(byte3);
+    Wire.write(byte4);
 }
