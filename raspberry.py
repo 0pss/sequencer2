@@ -6,7 +6,7 @@ import busio
 import subprocess
 from typing import Tuple
 import smbus2 as smbus
-from smbus2 import i2c_msg
+from smbus2 import SMBus, i2c_msg
 import threading
 import time
 from time import perf_counter
@@ -113,34 +113,25 @@ class I2CController:
             print(f"Error initializing MPR121 at address 0x{address:02X}: {e}")
             raise
 
-    
-
     def read_touch_sensors(self) -> Tuple[list, list]:
         """Read the status of all inputs from both MPR121 sensors."""
         try:
             with self._lock:
-                # Create two read messages, one for each MPR121 sensor's status register
-                read_msg1 = i2c_msg.read(self.mpr121_address1, 2)  # 2 bytes for status
-                read_msg2 = i2c_msg.read(self.mpr121_address2, 2)  # 2 bytes for status
-
-                # Perform the I2C read operation in one go
-                self.bus.i2c_rdwr(read_msg1, read_msg2)
-
-                # Extract the data from the read messages
-                status1 = int.from_bytes(list(read_msg1), byteorder='little')  # Convert to integer
-                status2 = int.from_bytes(list(read_msg2), byteorder='little')  # Convert to integer
-
+                # Read touch status registers (2 bytes each sensor)
+                status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
+                status2 = self.bus.read_word_data(self.mpr121_address2, self.TOUCH_STATUS_REG)
+                
             # Convert to list of boolean values for each electrode
             sensor1_status = [(status1 & (1 << i)) != 0 for i in range(12)]
             sensor2_status = [(status2 & (1 << i)) != 0 for i in range(12)]
+            
             
             return sensor1_status, sensor2_status
             
         except IOError as e:
             print(f"Error reading touch sensors: {e}")
             return [False] * 12, [False] * 12
-    
-    
+
     def print_touched_inputs(self):
         """Print which inputs are currently being touched on both sensors."""
         sensor1_status, sensor2_status = self.read_touch_sensors()
@@ -164,15 +155,11 @@ class I2CController:
         """
         try:
             with self._lock:
+
                 data = (position & 0x3F)  # Ensure position is within 6-bit range
                 print(f"sending position: {position} and data: {data}")
-                
-                # Create the I2C write message for position
-                write_msg = i2c_msg.write(self.arduino_address, [0x01, data])
-                
-                # No need to perform a separate read, only writing here
-                with self.bus:
-                    self.bus.i2c_rdwr(write_msg)
+                self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
+
             
         except Exception as e:
             print(f"I2C write error (position): {e}")
@@ -181,23 +168,22 @@ class I2CController:
         """Returns the current BPM value from the rotary encoder."""
         try:
             with self._lock:
-                # Create an I2C read message to retrieve BPM data
-                read_msg = i2c_msg.read(self.arduino_address, 2)
 
-                # Perform the read operation
-                with self.bus:
-                    self.bus.i2c_rdwr(read_msg)
+                #### BPM ##############
+                # Read the 4 data bytes using read_word_data
+                #high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
+
+                msg = i2c_msg.read(self.arduino_address, 2)
+                self.bus.i2c_rdwr(msg)
                 
-                # The data will be in read_msg, here you need to extract the BPM value
-                # Assuming you need to process the response
-                bpm_data = list(read_msg)
-                # Process the data to get the BPM (just an example; adjust as necessary)
-                self.current_bpm = 120 + bpm_data[0]  # Example, you may need to adjust depending on the data format
+                #print(high_byte)
+                self.current_bpm = 120 + 0
 
-                print(f"Received BPM: {self.current_bpm}")
+                #### END BPM ###########
 
+            
         except Exception as e:
-            print(f"I2C read error (bpm): {e}")
+            print(f"I2C write error (bpm): {e}")
 
 
     def __del__(self):
@@ -397,7 +383,7 @@ def main_loop(i2c: I2CController):
                 
                 # Send current position to Arduino
                 i2c.send_position(SEQUENCER_GLOBAL_STEP)
-                i2c.print_touched_inputs()  
+                #i2c.print_touched_inputs()  
                 i2c.get_bpm()
                 new_bpm = i2c.current_bpm
 
