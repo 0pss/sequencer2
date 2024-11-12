@@ -127,17 +127,9 @@ class I2CController:
             #### BPM ##############
             # Read the 4 data bytes using read_word_data
             high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
-            low_byte = self.bus.read_word_data(self.arduino_address, 2)   # Read second word (2 bytes)
             
-            # Combine the two 2-byte values to reconstruct the 4-byte value
-            data = [(high_byte & 0xFF), (high_byte >> 8) & 0xFF, (low_byte & 0xFF), (low_byte >> 8) & 0xFF]
-            
-            # Reconstruct the long value from the 4 data bytes
-            bpm_change = struct.unpack('<L', bytes(data))[0]
-            if data[3] > 0:
-                bpm_change -= 2**32
-
-            self.current_bpm = 120 + bpm_change
+            print(high_byte)
+            self.current_bpm = 120 + 0
 
             #### END BPM ###########
 
