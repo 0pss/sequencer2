@@ -155,11 +155,15 @@ class I2CController:
         """
         try:
             with self._lock:
-
                 data = (position & 0x3F)  # Ensure position is within 6-bit range
                 print(f"sending position: {position} and data: {data}")
-                self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
-
+                
+                # Create the I2C write message for position
+                write_msg = i2c_msg.write(self.arduino_address, [0x01, data])
+                
+                # No need to perform a separate read, only writing here
+                with self.bus:
+                    self.bus.i2c_rdwr(write_msg)
             
         except Exception as e:
             print(f"I2C write error (position): {e}")
@@ -168,22 +172,23 @@ class I2CController:
         """Returns the current BPM value from the rotary encoder."""
         try:
             with self._lock:
+                # Create an I2C read message to retrieve BPM data
+                read_msg = i2c_msg.read(self.arduino_address, 2)
 
-                #### BPM ##############
-                # Read the 4 data bytes using read_word_data
-                #high_byte = self.bus.read_word_data(self.arduino_address, 0)  # Read first word (2 bytes)
-
-                msg = i2c_msg.read(self.arduino_address, 2)
-                self.bus.i2c_rdwr(msg)
+                # Perform the read operation
+                with self.bus:
+                    self.bus.i2c_rdwr(read_msg)
                 
-                #print(high_byte)
-                self.current_bpm = 120 + 0
+                # The data will be in read_msg, here you need to extract the BPM value
+                # Assuming you need to process the response
+                bpm_data = list(read_msg)
+                # Process the data to get the BPM (just an example; adjust as necessary)
+                self.current_bpm = 120 + bpm_data[0]  # Example, you may need to adjust depending on the data format
 
-                #### END BPM ###########
+                print(f"Received BPM: {self.current_bpm}")
 
-            
         except Exception as e:
-            print(f"I2C write error (bpm): {e}")
+            print(f"I2C read error (bpm): {e}")
 
 
     def __del__(self):
