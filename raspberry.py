@@ -369,7 +369,7 @@ def main_loop(i2c: I2CController):
     pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
 
     SEQUENCER_GLOBAL_STEP = 0
-    SEQUENCER_ON = [[0 for _ in range(20)] for _ in range(4)]
+    SEQUENCER_ON = [[1 for _ in range(20)]] + [[0 for _ in range(20)] for _ in range(3)]
     SEQUENCER_CHANGED = [0 for _ in range(20)]
     SEQUENCER_AUDIO = [create_silent_wave() for _ in range(20)]
 
