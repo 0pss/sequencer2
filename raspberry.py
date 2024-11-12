@@ -164,11 +164,12 @@ class I2CController:
         """Returns the current BPM value from the rotary encoder."""
         try:
             with self._lock:
-                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 1)
+                # Read the 4 data bytes
+                data = self.bus.read_i2c_block_data(self.arduino_address, 0, 4)
 
-                print(data)
+                # Reconstruct the long value from the 4 data bytes
+                bpm_change = struct.unpack('L', bytes(data))[0]   
 
-                bpm_change = struct.unpack('b', bytes([data[0]]))[0]  # 'b' is for signed 8-bit                
                 print("recieved BPM: ", 120 + bpm_change)
                 #TODO Somethings fishy here
                 self.current_bpm = 120 + bpm_change
