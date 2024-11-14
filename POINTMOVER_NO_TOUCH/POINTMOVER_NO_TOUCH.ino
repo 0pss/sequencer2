@@ -109,6 +109,8 @@ void setup() {
     Wire.begin(I2C_SLAVE_ADDRESS);
     Wire.onReceive(receiveEvent);
     Wire.onRequest(requestEvent);
+
+    Serial.begin(115200);
     
     FastLED.addLeds<WS2812B, LED_PIN, GBR>(leds, NUM_LEDS);
     FastLED.setBrightness(BRIGHTNESS);
@@ -139,29 +141,33 @@ void loop() {
 void receiveEvent(int howMany) {
     if (howMany < 2) return;
 
+    Serial.println("Command recieved");
+
     byte command = Wire.read();
     byte data = Wire.read();
 
     if (command == 0x01) {
         led_control_state.animation_position = data;
         update_leds();
+
+        
         
     } 
 }
 
 void requestEvent() {
 
+    Serial.println("BPM SENT");
+
     long bpmValue = newPosition; // Example long value
 
     // Split the long into individual bytes
     byte byte1 = (byte)(bpmValue & 0xFF);
     byte byte2 = (byte)((bpmValue >> 8) & 0xFF);
-    byte byte3 = (byte)((bpmValue >> 16) & 0xFF);
-    byte byte4 = (byte)((bpmValue >> 24) & 0xFF);
+ 
 
     // Send the bytes one by one
     Wire.write(byte1);
     Wire.write(byte2);
-    Wire.write(byte3);
-    Wire.write(byte4);
+
 }
