@@ -20,33 +20,13 @@ from PIDController import PIDController
 from render import *
 
 from multiprocessing import Process, Value, Array, Manager
-import os
-import psutil 
+import os 
+from stat_server import serve_with_realtime_priority
  
-
-class SequencerState:
-    def __init__(self):
-        self.manager = Manager()
-        # Convert global variables to shared variables
-        self.sequencer_audio = self.manager.list()
-        for _ in range(16):
-            self.sequencer_audio.append(create_silent_wave())
-
-        self.sequencer_changed = Array('i', [1 for _ in range(16)])
-        self.raw_samples = self.manager.list([])  # Will be populated with samples
-        self.sequencer_global_step = Value('i', 0)
-        self.bpm = Value('i', 120)
-        self.stopped = Value('b', False)  # boolean
-        
-        # Create 4x16 grid of sequencer states
-        # Use a list of Arrays for sequencer_on without Manager
-        self.sequencer_on = [
-            Array('i', [1] * 16),  # First row, all on
-            *[Array('i', [0] * 16) for _ in range(3)]  # Other rows, all off
-        ]
+from managers import SequencerState
 
 
-def main_loop(i2c: I2CController, sound_process, state: SequencerState):
+def main_loop(i2c: I2CController, sound_process, stats_process, state: SequencerState):
     # Load samples
     raw_samples = load_n_samples("./", 4)
     state.raw_samples.extend(raw_samples)
@@ -59,6 +39,8 @@ def main_loop(i2c: I2CController, sound_process, state: SequencerState):
     calculated = True
     pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.01)
     sound_process.start()
+    stats_process.start()
+
     
     while not state.stopped.value:
         b = perf_counter()
@@ -66,10 +48,10 @@ def main_loop(i2c: I2CController, sound_process, state: SequencerState):
         
         if (te > wait_time) or a == 0:
 
-            print(te)
+            #print(te)
 
             a = perf_counter()
-            print("tick ", state.sequencer_global_step.value)
+            #print("tick ", state.sequencer_global_step.value)
             
             # Play audio
             state.sequencer_audio[state.sequencer_global_step.value].play()
@@ -83,20 +65,20 @@ def main_loop(i2c: I2CController, sound_process, state: SequencerState):
         else:
             if not calculated:
                 # Send current position to Arduino
-               # i2c.send_position(state.sequencer_global_step.value)
-                #i2c.get_bpm()
-                #new_bpm = i2c.current_bpm
+                i2c.send_position(state.sequencer_global_step.value)
+                i2c.get_bpm()
+                new_bpm = i2c.current_bpm
                 
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
                 
                 # Update BPM if changed
-                #if new_bpm != state.bpm.value:
-                 #   with state.bpm.get_lock():
-                  #      state.bpm.value = new_bpm
-                   #     d = 60/np.max([new_bpm, 1])
-                    #print(f'New BPM: {new_bpm}')
+                if new_bpm != state.bpm.value:
+                    with state.bpm.get_lock():
+                        state.bpm.value = new_bpm
+                        d = 60/np.max([new_bpm, 1])
+                    print(f'New BPM: {new_bpm}')
 
 
 
@@ -119,6 +101,7 @@ def main():
     if not is_raspberry_pi():
         print("Not running on a Raspberry Pi.")
         sound_process = Process(target=render_with_realtime_priority, args=(state,), daemon=True)
+        stats_process = Process(target=serve_with_realtime_priority, args=(state,), daemon=True)
         i2c = dummy_I2CController()
     else:
         print("Running on a Raspberry Pi.")
@@ -127,10 +110,12 @@ def main():
         import smbus2 as smbus
         from smbus2 import SMBus, i2c_msg
         i2c = I2CController()
+        stats_process = Process(target=serve_with_realtime_priority, args=(state,), daemon=True)
+
         sound_process = Process(target=render_with_realtime_priority, args=(state,), daemon=True)
     
     # Start the main loop
-    main_loop(i2c, sound_process, state)
+    main_loop(i2c, sound_process, stats_process, state)
 
 if __name__ == "__main__":
     main()

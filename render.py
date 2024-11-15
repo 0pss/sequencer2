@@ -6,7 +6,7 @@ from multiprocessing import Process, Value, Array, Manager
 import os
 import psutil 
 import time
-from raspberry import SequencerState
+from managers import SequencerState
 
 
 def render(state: SequencerState):

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Statistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Container for both charts */
+        .chart-container {
+            display: flex;
+            justify-content: space-between;
+        }
+        /* Style for the individual charts */
+        .chart {
+            width: 48%;  /* Each chart will take up 50% of the screen, with some margin between them */
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Statistics</h1>
+    <div>
+        <h3>Numbers:</h3>
+        <ul id="numbers-list"></ul>
+    </div>
+
+    <p id="bpm">BPM: 120</p>
+    
+    <div class="chart-container">
+        <div class="chart">
+            <h3>Line Graph (CPU Load)</h3>
+            <canvas id="lineChart" width="400" height="200"></canvas>
+        </div>
+        <div class="chart">
+            <h3>Bar Graph (CPU Load)</h3>
+            <canvas id="barChart" width="400" height="200"></canvas>
+        </div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            const response = await fetch('/data');
+            const data = await response.json();
+
+            // Update numbers
+            const numbersList = document.getElementById('numbers-list');
+            numbersList.innerHTML = '';
+            data.numbers.forEach(num => {
+                const li = document.createElement('li');
+                li.textContent = num;
+                numbersList.appendChild(li);
+            });
+
+            // Display BPM value
+            document.getElementById('bpm').textContent = `BPM: ${data.bpm}`;
+
+            // Update graphs
+            updateLineChart(data.graph_data);
+            updateBarChart(data.graph_data);
+        }
+
+        // Create line chart
+        const lineCtx = document.getElementById('lineChart').getContext('2d');
+        const lineChart = new Chart(lineCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'CPU Load (Line Graph)',
+                    data: [],
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        function updateLineChart(graphData) {
+            lineChart.data.labels = graphData.x;
+            lineChart.data.datasets[0].data = graphData.y;
+            lineChart.update();
+        }
+
+        // Create bar chart
+        const barCtx = document.getElementById('barChart').getContext('2d');
+        const barChart = new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'CPU Load (Bar Graph)',
+                    data: [],
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        function updateBarChart(graphData) {
+            barChart.data.labels = graphData.x;
+            barChart.data.datasets[0].data = graphData.y;
+            barChart.update();
+        }
+
+        // Fetch data every 10 seconds
+        setInterval(fetchData, 10000);
+        fetchData(); // Initial fetch
+    </script>
+</body>
+</html>
