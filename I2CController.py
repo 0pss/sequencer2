@@ -88,6 +88,7 @@ class I2CController(Process):
         
         while self.running.value:
             try:
+                print("reading sensors?")
                 # Update touch sensors
                 with self._lock:
                     status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
@@ -111,6 +112,8 @@ class I2CController(Process):
                         result -= 2**16
                     
                     self.current_bpm.value = 120 + result
+
+                    print("yes, all read")
                 
             except Exception as e:
                 print(f"Error in I2C process: {e}")

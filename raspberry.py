@@ -56,6 +56,7 @@ def main_loop(i2c: I2CController, sound_process, stats_process, state: Sequencer
             #print("tick ", state.sequencer_global_step.value)
             
             # Play audio
+            print("playing sound")
             state.sequencer_audio[state.sequencer_global_step.value].play()
             
             # Update step with atomic operation
