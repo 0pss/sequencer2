@@ -30,9 +30,11 @@ def main_loop(i2c: I2CController, sound_process, stats_process, state: Sequencer
     # Load samples
     raw_samples = load_n_samples("./", 4)
     state.raw_samples.extend(raw_samples)
+
+    bpm = state.bpm.value
     
     # Initialize timing variables
-    delay = d = wait_time = 60 / state.bpm.value
+    delay = d = wait_time = 60 / bpm
     print(f'{60 / delay} bpm')
     
     a = perf_counter()
@@ -67,17 +69,16 @@ def main_loop(i2c: I2CController, sound_process, stats_process, state: Sequencer
                 # Send current position to Arduino
                 i2c.send_position(state.sequencer_global_step.value)
                 i2c.get_bpm()
-                new_bpm = i2c.current_bpm
+                new_bpm = i2c.get_bpm()
                 
                 correction = pid.update(delay, d)
                 wait_time = max(0, d - correction)
                 calculated = True
                 
                 # Update BPM if changed
-                if new_bpm != state.bpm.value:
-                    with state.bpm.get_lock():
-                        state.bpm.value = new_bpm
-                        d = 60/np.max([new_bpm, 1])
+                if new_bpm != bpm:
+                    d = 60/np.max([new_bpm, 1])
+                    bpm = new_bpm
                     print(f'New BPM: {new_bpm}')
 
 
