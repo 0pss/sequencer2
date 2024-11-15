@@ -53,8 +53,27 @@ def resample_audio(numpy_array, original_channels, target_channels=2):
         return np.mean(numpy_array.reshape(-1, 2), axis=1)
     else:
         raise ValueError("Unsupported channel conversion")
-
+    
 def Numpy2Wave(numpy_array: np.ndarray) -> 'WaveObject':
+    # Ensure the input is in the range [-1, 1]
+    numpy_array = np.clip(numpy_array, -1, 1)
+    
+    # Ensure the array is 2D (stereo)
+    if len(numpy_array.shape) == 1:
+        numpy_array = np.column_stack((numpy_array, numpy_array))
+    elif numpy_array.shape[1] == 1:
+        numpy_array = np.repeat(numpy_array, 2, axis=1)
+    
+    # Convert to int16
+    max_value = 2**15 - 1  # Max value for 16-bit audio (32767)
+    numpy_array = (numpy_array * max_value).astype(np.int16)
+    
+    # Pack as 2-byte integers
+    byte_data = numpy_array.tobytes()  # More efficient than using struct.pack
+    
+    return sa.WaveObject(byte_data, num_channels=2, bytes_per_sample=2, sample_rate=44100)
+
+def Numpy2Wave_24bit(numpy_array: np.ndarray) -> 'WaveObject':
     # Ensure the input is in the range [-1, 1]
     numpy_array = np.clip(numpy_array, -1, 1)
     
