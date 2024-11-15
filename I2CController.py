@@ -74,6 +74,8 @@ class I2CController(Process):
                 self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x0C)
                 self.bus.write_byte_data(address, self.AUTO_CONFIG_0, 0x0B)
                 self.bus.write_byte_data(address, self.AUTO_CONFIG_1, 0x9F)
+
+                print("DONE INIT MPR121")
                 
         except IOError as e:
             print(f"Error initializing MPR121 at address 0x{address:02X}: {e}")
@@ -82,6 +84,7 @@ class I2CController(Process):
     def run(self):
         """Main process loop - continuously updates sensor data and BPM."""
                 
+        print("\n\n\n RUN I2C TRIGGERED\n\n\n")
         # Initialize MPR121 sensors
         self._init_mpr121(self.mpr121_address1)
         self._init_mpr121(self.mpr121_address2)
