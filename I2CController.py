@@ -50,7 +50,7 @@ class I2CController(Process):
         self._lock = Lock()
         
         # The SMBus instance will be initialized in run() since it needs to be in the child process
-        self.bus = None
+        self.bus = SMBus(bus_number)
 
     def _init_mpr121(self, address):
         """Initialize a single MPR121 sensor with default configuration."""
@@ -81,9 +81,7 @@ class I2CController(Process):
 
     def run(self):
         """Main process loop - continuously updates sensor data and BPM."""
-        # Initialize SMBus in the child process
-        self.bus = SMBus(self.bus_number)
-        
+                
         # Initialize MPR121 sensors
         self._init_mpr121(self.mpr121_address1)
         self._init_mpr121(self.mpr121_address2)
