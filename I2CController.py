@@ -146,14 +146,16 @@ def read_mprs(bus, state, edge_detector):
                     touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
                     edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
                     if edge == "rising":
-                        state.sequencer_on[i + 1][j] ^= 1  # Toggle on rising edge
+                        state.sequencer_on[i][j] ^= 1  # Toggle on rising edge
+                        state.sequencer_changed[j] = 1
 
                 # Sensor 2: Map columns 12–15 for the active row
                 for j in range(4):  # j corresponds to columns 12–15
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
                     edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
                     if edge == "rising":
-                        state.sequencer_on[i + 1][j + 12] ^= 1  # Toggle on rising edge
+                        state.sequencer_on[i][j + 12] ^= 1  # Toggle on rising edge
+                        state.sequencer_changed[j+12] = 1
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")

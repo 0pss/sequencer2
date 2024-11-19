@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 from utils import *
 from globals import *
-from I2CController import I2CController, dummy_I2CController, i2c_with_realtime_priority
+from I2CController import i2c_with_realtime_priority
 from PIDController import PIDController
 from render import *
 
