@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, session, render_template
-import random
 import socket
 import os
 import psutil

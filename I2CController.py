@@ -1,4 +1,5 @@
-import globals
+import psutil
+from managers import SequencerState
 from utils import *
 from multiprocessing import Process, Lock, Array, Value
 from typing import Tuple
@@ -6,8 +7,45 @@ from smbus2 import SMBus, i2c_msg
 from time import sleep
 import ctypes
 
-class I2CController(Process):
+#  self.bus.close()
+class InputEdgeDetector:
+    def __init__(self, debounce_threshold=3):
+        self.debounce_threshold = debounce_threshold
+        self.touch_buffer = [[0] * 16 for _ in range(4)]  # Tracks stable states
+        self.touch_counters = [[0] * 16 for _ in range(4)]  # Stability counters
+        self.previous_state = [[0] * 16 for _ in range(4)]  # Tracks previous stable states
 
+    def debounce_and_detect_edge(self, row, col, current_state):
+        """
+        Debounce logic combined with rising/falling edge detection.
+        Returns:
+            "rising" for a rising edge (0 -> 1),
+            "falling" for a falling edge (1 -> 0),
+            None if no edge is detected.
+        """
+        # Debounce logic
+        if current_state:
+            self.touch_counters[row][col] += 1
+            if self.touch_counters[row][col] >= self.debounce_threshold:
+                self.touch_buffer[row][col] = 1
+        else:
+            self.touch_counters[row][col] = 0
+            self.touch_buffer[row][col] = 0
+
+        # Edge detection
+        edge_detected = None
+        if self.touch_buffer[row][col] != self.previous_state[row][col]:
+            if self.touch_buffer[row][col] == 1:
+                edge_detected = "rising"
+            else:
+                edge_detected = "falling"
+
+        # Update previous state
+        self.previous_state[row][col] = self.touch_buffer[row][col]
+
+        return edge_detected
+
+def init(state: SequencerState):
     # MPR121 Register addresses
     TOUCH_STATUS_REG = 0x00
     ELE_CFG_REG = 0x5E
@@ -31,207 +69,128 @@ class I2CController(Process):
     AUTO_CONFIG_0 = 0x7B
     AUTO_CONFIG_1 = 0x7C
 
-    def __init__(self, arduino_address: int = 0x08, bus_number: int = 1):
-        """Initialize the I2C controller process."""
-        Process.__init__(self, daemon=True)
+    bus_number: int = 1
         
-        # I2C setup
-        self.bus_number = bus_number
-        self.arduino_address = arduino_address
-        self.mpr121_address1 = 0x5A
-        self.mpr121_address2 = 0x5B
+    # I2C setup
+    mpr121_addresses = [0x5A, 0x5B]
+      
+
+    # The SMBus instance will be initialized in run() since it needs to be in the child process
+    bus = SMBus(bus_number)
+
+    for address in mpr121_addresses:
+        bus.write_byte_data(address, ELE_CFG_REG, 0x00)
         
-        # Shared state setup using multiprocessing primitives
-        self.current_bpm = Value(ctypes.c_int, 120)
-        # Create boolean arrays for touch sensors (using c_bool for atomic operations)
-        self.touch_data1 = Array(ctypes.c_bool, [False] * 12)
-        self.touch_data2 = Array(ctypes.c_bool, [False] * 12)
-        self.running = Value(ctypes.c_bool, True)
-        self._lock = Lock()
+        # Configure touch and release thresholds
+        for i in range(12):
+            bus.write_byte_data(address, ELE0_T + i*2, 12)
+            bus.write_byte_data(address, ELE0_R + i*2, 6)
         
-        # The SMBus instance will be initialized in run() since it needs to be in the child process
-        self.bus = SMBus(bus_number)
-
-    def _init_mpr121(self, address):
-        """Initialize a single MPR121 sensor with default configuration."""
-        try:
-            with self._lock:
-                # Soft reset
-                self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x00)
-                
-                # Configure touch and release thresholds
-                for i in range(12):
-                    self.bus.write_byte_data(address, self.ELE0_T + i*2, 12)
-                    self.bus.write_byte_data(address, self.ELE0_R + i*2, 6)
-                
-                # Configure baseline filtering
-                self.bus.write_byte_data(address, self.MHD_R, 0x01)
-                self.bus.write_byte_data(address, self.NHD_R, 0x01)
-                self.bus.write_byte_data(address, self.NCL_R, 0x00)
-                self.bus.write_byte_data(address, self.FDL_R, 0x00)
-                
-                # Enable electrodes and auto configuration
-                self.bus.write_byte_data(address, self.ELE_CFG_REG, 0x0C)
-                self.bus.write_byte_data(address, self.AUTO_CONFIG_0, 0x0B)
-                self.bus.write_byte_data(address, self.AUTO_CONFIG_1, 0x9F)
-
-                print("DONE INIT MPR121")
-                
-        except IOError as e:
-            print(f"Error initializing MPR121 at address 0x{address:02X}: {e}")
-            raise
-
-    def run(self):
-        """Main process loop - continuously updates sensor data and BPM."""
-                
-        print("\n\n\n RUN I2C TRIGGERED\n\n\n")
-        # Initialize MPR121 sensors
-        self._init_mpr121(self.mpr121_address1)
-        self._init_mpr121(self.mpr121_address2)
+        # Configure baseline filtering
+        bus.write_byte_data(address, MHD_R, 0x01)
+        bus.write_byte_data(address, NHD_R, 0x01)
+        bus.write_byte_data(address, NCL_R, 0x00)
+        bus.write_byte_data(address, FDL_R, 0x00)
         
-        while self.running.value:
-            try:
-                print("reading sensors?")
-                # Update touch sensors
-                with self._lock:
-                    status1 = self.bus.read_word_data(self.mpr121_address1, self.TOUCH_STATUS_REG)
-                    status2 = self.bus.read_word_data(self.mpr121_address2, self.TOUCH_STATUS_REG)
-                
-                # Update shared arrays
-                for i in range(12):
-                    self.touch_data1[i] = bool(status1 & (1 << i))
-                    self.touch_data2[i] = bool(status2 & (1 << i))
-                
-                # Update BPM
-                with self._lock:
-                    msg = i2c_msg.read(self.arduino_address, 2)
-                    self.bus.i2c_rdwr(msg)
-                    
-                    mes = [msg.buf[k] for k in range(msg.len)]
-                    mes_bytes = b''.join(mes)
-                    result = int.from_bytes(mes_bytes, byteorder='little')
-                    
-                    if result > 2**14:
-                        result -= 2**16
-                    
-                    self.current_bpm.value = 120 + result
+        # Enable electrodes and auto configuration
+        bus.write_byte_data(address, ELE_CFG_REG, 0x0C)
+        bus.write_byte_data(address, AUTO_CONFIG_0, 0x0B)
+        bus.write_byte_data(address, AUTO_CONFIG_1, 0x9F)
 
-                    print("yes, all read")
-                
-            except Exception as e:
-                print(f"Error in I2C process: {e}")
-            
-            sleep(0.1)  # Small delay to prevent busy-waiting
+    print("DONE INIT MPR121")
+
+    return bus
+
+def send_position(bus, arduino_address, state: SequencerState):
+    try:
+        position = state.sequencer_global_step.value
+        data = position & 0x3F
+        print(f"sending position: {position} and data: {data}")
+        bus.write_i2c_block_data(arduino_address, 0x01, [data])
+    except Exception as e:
+        print(f"I2C write error (position): {e}")
+
+def read_bpm(bus, arduino_address, state: SequencerState):
+    try:
+        msg = i2c_msg.read(arduino_address, 2)
+        bus.i2c_rdwr(msg)
         
-        # Clean up
-        self.bus.close()
+        mes = [msg.buf[k] for k in range(msg.len)]
+        mes_bytes = b''.join(mes)
+        result = int.from_bytes(mes_bytes, byteorder='little')
+        
+        if result > 2**14:
+            result -= 2**16
+        
+        state.bpm.value += result
+    
+    except Exception as e:
+        print(f"Error in I2C (reading BPM): {e}")
 
-    def read_touch_sensors(self) -> Tuple[list, list]:
-        """Non-blocking read of touch sensor status."""
-        # Convert shared arrays to regular lists for return
-        return (list(self.touch_data1), list(self.touch_data2))
-
-    def get_bpm(self) -> int:
-        """Non-blocking read of current BPM."""
-        return self.current_bpm.value
-
-    def send_position(self, position: int):
-        """Send position update to Arduino for LED display."""
-        try:
-            with self._lock:
-                data = position & 0x3F
-                print(f"sending position: {position} and data: {data}")
-                self.bus.write_i2c_block_data(self.arduino_address, 0x01, [data])
-        except Exception as e:
-            print(f"I2C write error (position): {e}")
-
-    def stop(self):
-        """Stop the I2C process and clean up."""
-        self.running.value = False
-        self.join()
-
-    def __del__(self):
-        """Ensure proper cleanup on object destruction."""
-        if hasattr(self, 'running') and self.running.value:
-            self.stop()
-
-
-class dummy_I2CController(Process):
-
-        # MPR121 Register addresses
+def read_mprs(bus, state, edge_detector):
+    mpr121_addresses = [0x5A, 0x5B]
     TOUCH_STATUS_REG = 0x00
-    ELE_CFG_REG = 0x5E
-    MHD_R = 0x2B
-    NHD_R = 0x2C
-    NCL_R = 0x2D
-    FDL_R = 0x2E
-    MHD_F = 0x2F
-    NHD_F = 0x30
-    NCL_F = 0x31
-    FDL_F = 0x32
-    NHDT = 0x33
-    NCLT = 0x34
-    FDLT = 0x35
-    MHDF = 0x36
-    NHDF = 0x37
-    NCLF = 0x38
-    FDLF = 0x39
-    ELE0_T = 0x41
-    ELE0_R = 0x42
-    AUTO_CONFIG_0 = 0x7B
-    AUTO_CONFIG_1 = 0x7C
 
-    def __init__(self, arduino_address: int = 0x08, bus_number: int = 1):
-        """Initialize the I2C controller process."""
-        Process.__init__(self, daemon=True)
-        
-        # I2C setup
-        self.bus_number = bus_number
-        self.arduino_address = arduino_address
-        self.mpr121_address1 = 0x5A
-        self.mpr121_address2 = 0x5B
-        
-        # Shared state setup using multiprocessing primitives
-        self.current_bpm = 144
-        # Create boolean arrays for touch sensors (using c_bool for atomic operations)
-        self.touch_data1 = Array(ctypes.c_bool, [False] * 12)
-        self.touch_data2 = Array(ctypes.c_bool, [False] * 12)
-        self.running = Value(ctypes.c_bool, True)
-        self._lock = Lock()
-        
-        # The SMBus instance will be initialized in run() since it needs to be in the child process
-        self.bus = None
+    try:
+        # Read touch statuses from both sensors
+        status1 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
+        status2 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
 
-    def run(self):
-        """Main process loop - continuously updates sensor data and BPM."""
-        
-        while self.running.value:
-            pass
+        # Map last 4 outputs of Sensor 2 to rows 1-4 in column 11
+        for i in range(4):  # i corresponds to rows 1–4
+            row_active = bool(status2 & (1 << (i + 8)))  # Check bits 8–11 of status2
             
-            sleep(0.1)  # Small delay to prevent busy-waiting
+            if row_active:  # Process only if row is active
+                # Sensor 1: Map columns 0-11 for the active row
+                for j in range(12):  # j corresponds to columns 0–11
+                    touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
+                    edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
+                    if edge == "rising":
+                        state.sequencer_on[i + 1][j] ^= 1  # Toggle on rising edge
+
+                # Sensor 2: Map columns 12–15 for the active row
+                for j in range(4):  # j corresponds to columns 12–15
+                    touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
+                    edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
+                    if edge == "rising":
+                        state.sequencer_on[i + 1][j + 12] ^= 1  # Toggle on rising edge
+
+    except Exception as e:
+        print(f"Error in I2C (reading MPR): {e}")
+
+
+def I2Ccommunicate(state: SequencerState):
+
+    arduino_address: int = 0x08
+
+    debouncer = InputEdgeDetector(debounce_threshold=3)
+
+    bus = init(state)
+
+    while True:
+        # send position
+        send_position(bus, arduino_address, state)
+        sleep(0.01)
+        # Read Touch
+        read_mprs(bus, state, debouncer)
+        sleep(0.01)
+        #read BPM
+        read_bpm(bus, arduino_address, state)
+        sleep(0.01)
+        #send LED array
+        #send_array(bus, arduino_address, state)
+        #sleep(0.01)
+
+def i2c_with_realtime_priority(state: SequencerState):
+    process = psutil.Process(os.getpid())
+
+    # Set CPU affinity to core 1
+    process.cpu_affinity([1])
+
+    # Optionally set high priority (Unix/Linux only)
+    try:
+        os.nice(-19)  # Highest priority
+    except Exception as e:
+        print(f"Could not set process priority: {e}")
         
-        # Clean up
-        self.bus.close()
-
-    def read_touch_sensors(self) -> Tuple[list, list]:
-        """Non-blocking read of touch sensor status."""
-        # Convert shared arrays to regular lists for return
-        return (list(self.touch_data1), list(self.touch_data2))
-
-    def get_bpm(self) -> int:
-        """Non-blocking read of current BPM."""
-        return self.current_bpm
-
-    def send_position(self, position: int):
-        """Send position update to Arduino for LED display."""
-        pass
-
-    def stop(self):
-        """Stop the I2C process and clean up."""
-        self.running.value = False
-        self.join()
-
-    def __del__(self):
-        """Ensure proper cleanup on object destruction."""
-        if hasattr(self, 'running') and self.running.value:
-            self.stop()
+    I2Ccommunicate(state)
