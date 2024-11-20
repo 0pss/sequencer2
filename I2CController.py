@@ -106,7 +106,7 @@ def send_position(bus, arduino_address, state: SequencerState):
     try:
         position = state.sequencer_global_step.value
         data = position & 0x3F
-        print(f"sending position: {position} and data: {data}")
+        #print(f"sending position: {position} and data: {data}")
         bus.write_i2c_block_data(arduino_address, 0x01, [data])
     except Exception as e:
         print(f"I2C write error (position): {e}")
@@ -125,7 +125,9 @@ def read_bpm(bus, arduino_address, state: SequencerState, old_result):
         
         if result != old_result:
 
-            state.bpm.value += result
+            print("NEW BPM:", result)
+
+            state.bpm.value += (result - 120)
             
     except Exception as e:
         print(f"Error in I2C (reading BPM): {e}")
