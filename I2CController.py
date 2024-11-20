@@ -9,7 +9,6 @@ import ctypes
 
 #  self.bus.close()
 
-old_result = 0
 class InputEdgeDetector:
     def __init__(self, debounce_threshold=3):
         self.debounce_threshold = debounce_threshold
@@ -112,7 +111,7 @@ def send_position(bus, arduino_address, state: SequencerState):
     except Exception as e:
         print(f"I2C write error (position): {e}")
 
-def read_bpm(bus, arduino_address, state: SequencerState):
+def read_bpm(bus, arduino_address, state: SequencerState, old_result):
     try:
         msg = i2c_msg.read(arduino_address, 2)
         bus.i2c_rdwr(msg)
@@ -127,11 +126,11 @@ def read_bpm(bus, arduino_address, state: SequencerState):
         if result != old_result:
 
             state.bpm.value += result
-        
-        old_result = result
-    
+            
     except Exception as e:
         print(f"Error in I2C (reading BPM): {e}")
+
+    return result
 
 def read_mprs(bus, state, edge_detector):
     mpr121_addresses = [0x5A, 0x5B]
@@ -175,6 +174,8 @@ def I2Ccommunicate(state: SequencerState):
 
     bus = init(state)
 
+    bpm_change = 0
+
     while True:
         # send position
         send_position(bus, arduino_address, state)
@@ -183,7 +184,7 @@ def I2Ccommunicate(state: SequencerState):
         read_mprs(bus, state, debouncer)
         sleep(0.01)
         #read BPM
-        read_bpm(bus, arduino_address, state)
+        bpm_change = read_bpm(bus, arduino_address, state, bpm_change)
         sleep(0.01)
         #send LED array
         #send_array(bus, arduino_address, state)
