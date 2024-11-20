@@ -127,7 +127,7 @@ def read_bpm(bus, arduino_address, state: SequencerState, old_result):
 
             print("NEW BPM:", result)
 
-            state.bpm.value += (result - 120)
+            state.bpm.value += result 
             
     except Exception as e:
         print(f"Error in I2C (reading BPM): {e}")
