@@ -190,7 +190,7 @@ def i2c_with_realtime_priority(state: SequencerState):
     process = psutil.Process(os.getpid())
 
     # Set CPU affinity to core 1
-    process.cpu_affinity([1])
+    process.cpu_affinity([3])
 
     # Optionally set high priority (Unix/Linux only)
     try:
