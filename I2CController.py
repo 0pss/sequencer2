@@ -8,6 +8,8 @@ from time import sleep
 import ctypes
 
 #  self.bus.close()
+
+old_result = 0
 class InputEdgeDetector:
     def __init__(self, debounce_threshold=3):
         self.debounce_threshold = debounce_threshold
@@ -122,7 +124,11 @@ def read_bpm(bus, arduino_address, state: SequencerState):
         if result > 2**14:
             result -= 2**16
         
-        state.bpm.value += result
+        if result != old_result:
+
+            state.bpm.value += result
+        
+        old_result = result
     
     except Exception as e:
         print(f"Error in I2C (reading BPM): {e}")
