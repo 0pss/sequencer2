@@ -183,6 +183,13 @@ def read_mprs(bus, state, edge_detector):
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
 
+# Helper function to reverse the bits in a 16-bit integer
+def reverse_bits_16bit(num):
+    reversed_num = 0
+    for _ in range(16):  # Process 16 bits
+        reversed_num = (reversed_num << 1) | (num & 1)  # Append LSB to reversed_num
+        num >>= 1  # Shift the input number to the right
+    return reversed_num
 
 def read_mprs_debug(bus, state, edge_detector):
     mpr121_addresses = [0x5A, 0x5B]
@@ -193,12 +200,14 @@ def read_mprs_debug(bus, state, edge_detector):
         status1 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
 
+        # Reverse the bit order for both statuses
+        status1 = reverse_bits_16bit(status1)
+        status2 = reverse_bits_16bit(status2)
 
         i = 0
         # Sensor 1: Map columns 0-11 for the active row
         for j in range(12):  # j corresponds to columns 0–11
             touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
-            print(touch_data1)
             edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
             if edge == "rising":
                 state.sequencer_on[i][j] ^= 1  # Toggle on rising edge
@@ -262,7 +271,7 @@ def I2Ccommunicate(state: SequencerState):
 
     arduino_address: int = 0x08
 
-    debouncer = InputEdgeDetector(debounce_threshold=3)
+    debouncer = InputEdgeDetector(debounce_threshold=1)
 
     bus = init(state)
 
