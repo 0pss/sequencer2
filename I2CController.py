@@ -184,7 +184,39 @@ def read_mprs(bus, state, edge_detector):
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
 
-def send_array(bus, arduino_address, state, retries=3, timeout=1.0):
+
+def read_mprs_debug(bus, state, edge_detector):
+    mpr121_addresses = [0x5A, 0x5B]
+    TOUCH_STATUS_REG = 0x00
+
+    try:
+        # Read touch statuses from both sensors
+        status1 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
+        status2 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
+
+        print("HERE", status1, status2)
+
+        i = 0
+        # Sensor 1: Map columns 0-11 for the active row
+        for j in range(12):  # j corresponds to columns 0–11
+            touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
+            edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
+            if edge == "rising":
+                state.sequencer_on[i][j] ^= 1  # Toggle on rising edge
+                state.sequencer_changed[j] = 1
+
+        # Sensor 2: Map columns 12–15 for the active row
+        for j in range(4):  # j corresponds to columns 12–15
+            touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
+            edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
+            if edge == "rising":
+                state.sequencer_on[i][j + 12] ^= 1  # Toggle on rising edge
+                state.sequencer_changed[j+12] = 1
+
+    except Exception as e:
+        print(f"Error in I2C (reading MPR): {e}")
+
+def send_array(bus, arduino_address, state):
     """
     Write the 4x16 sequencer state to Arduino via I2C with timeout and retry logic.
     
@@ -226,8 +258,6 @@ def send_array(bus, arduino_address, state, retries=3, timeout=1.0):
         
     except Exception as e:
         print(f"Attempt failed: {e}")
-        
-
 
 
 def I2Ccommunicate(state: SequencerState):
@@ -243,7 +273,7 @@ def I2Ccommunicate(state: SequencerState):
         send_position(bus, arduino_address, state)
         sleep(0.01)
         # Read Touch
-        read_mprs(bus, state, debouncer)
+        read_mprs_debug(bus, state, debouncer)
         sleep(0.01)
         #read BPM
         read_bpm(bus, arduino_address, state)
