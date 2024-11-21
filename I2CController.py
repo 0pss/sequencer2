@@ -163,34 +163,37 @@ def read_mprs(bus, state, edge_detector):
         print(f"Error in I2C (reading MPR): {e}")
 
 def send_array(bus, arduino_address, state):
-    """
-    Write the 4x16 sequencer state to Arduino via I2C.
-    
-    Args:
-        bus: SMBus object
-        arduino_address: I2C address of Arduino
-        sequencer_on: List of 4 Arrays, each containing 16 integers (0 or 1)
-    """
     try:
-        # Convert 2D array to flat bytes
-        data_bytes = bytearray()
+        # Start with command byte for sequencer states (0x02)
+        data_bytes = bytearray([0x02])
         
         # Pack each row into 2 bytes (16 bits)
         for row in state.sequencer_on:
-            row_bits = 0
-            for i, value in enumerate(row):
-                if value:  # if state is 1
-                    row_bits |= (1 << i)  # set the corresponding bit
+            byte1 = 0  # First 8 bits
+            byte2 = 0  # Second 8 bits
+            
+            # Pack first 8 bits
+            for i in range(8):
+                if row[i]:
+                    byte1 |= (1 << i)
+            
+            # Pack second 8 bits
+            for i in range(8):
+                if row[i + 8]:
+                    byte2 |= (1 << i)
             
             # Add the 2 bytes for this row to our data
-            data_bytes.extend(row_bits.to_bytes(2, byteorder='little'))
+            data_bytes.append(byte1)
+            data_bytes.append(byte2)
         
-        # Create write message (8 bytes total - 2 bytes per row * 4 rows)
-        print("Sending bytes: ", data_bytes)
+        # Create write message (9 bytes total - 1 command byte + 8 bytes data)
         msg = i2c_msg.write(arduino_address, data_bytes)
         
         # Send the message
         bus.i2c_rdwr(msg)
+        
+        # Debug print
+        print("Sent data bytes:", [hex(x) for x in data_bytes])
         
     except Exception as e:
         print(f"Error in I2C (writing sequencer state): {e}")
