@@ -1,3 +1,4 @@
+import time
 import psutil
 from managers import SequencerState
 from utils import *
@@ -162,41 +163,80 @@ def read_mprs(bus, state, edge_detector):
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
 
-def send_array(bus, arduino_address, state):
-    try:
-        # Start with command byte for sequencer states (0x02)
-        data_bytes = bytearray([0x02])
-        
-        # Pack each row into 2 bytes (16 bits)
-        for row in state.sequencer_on:
-            byte1 = 0  # First 8 bits
-            byte2 = 0  # Second 8 bits
+def send_array(bus, arduino_address, state, retries=3, timeout=1.0):
+    """
+    Write the 4x16 sequencer state to Arduino via I2C with timeout and retry logic.
+    
+    Args:
+        bus: SMBus object
+        arduino_address: I2C address of Arduino
+        sequencer_on: List of 4 Arrays, each containing 16 integers (0 or 1)
+        retries: Number of retry attempts
+        timeout: Timeout in seconds for each attempt
+    """
+    for attempt in range(retries):
+        try:
+            print(f"\nAttempt {attempt + 1} of {retries}")
             
-            # Pack first 8 bits
-            for i in range(8):
-                if row[i]:
-                    byte1 |= (1 << i)
+            # Check if device is responding
+            print(f"Checking if device 0x{arduino_address:02x} is available...")
+            try:
+                bus.read_byte(arduino_address)
+                print("Device is responding!")
+            except Exception as e:
+                print(f"Device check failed: {e}")
+                # List available I2C devices
+                print("\nScanning I2C bus for available devices...")
+                for addr in range(0x03, 0x78):
+                    try:
+                        bus.read_byte(addr)
+                        print(f"Found device at address: 0x{addr:02x}")
+                    except:
+                        pass
+                raise Exception("Device not responding")
+
+            # Start with command byte for sequencer states (0x02)
+            data_bytes = bytearray([0x02])
             
-            # Pack second 8 bits
-            for i in range(8):
-                if row[i + 8]:
-                    byte2 |= (1 << i)
+            # Pack each row into 2 bytes (16 bits)
+            for row_idx, row in enumerate(state.sequencer_on):
+                byte1 = 0  # First 8 bits
+                byte2 = 0  # Second 8 bits
+                
+                # Pack first 8 bits
+                for i in range(8):
+                    if row[i]:
+                        byte1 |= (1 << i)
+                
+                # Pack second 8 bits
+                for i in range(8):
+                    if row[i + 8]:
+                        byte2 |= (1 << i)
+                
+                data_bytes.append(byte1)
+                data_bytes.append(byte2)
+                print(f"Row {row_idx}: byte1=0x{byte1:02x}, byte2=0x{byte2:02x}")
             
-            # Add the 2 bytes for this row to our data
-            data_bytes.append(byte1)
-            data_bytes.append(byte2)
-        
-        # Create write message (9 bytes total - 1 command byte + 8 bytes data)
-        msg = i2c_msg.write(arduino_address, data_bytes)
-        
-        # Send the message
-        bus.i2c_rdwr(msg)
-        
-        # Debug print
-        print("Sent data bytes:", [hex(x) for x in data_bytes])
-        
-    except Exception as e:
-        print(f"Error in I2C (writing sequencer state): {e}")
+            print(f"Complete data packet: {' '.join([f'0x{x:02x}' for x in data_bytes])}")
+            
+            # Create and send write message
+            print("Sending data...")
+            msg = i2c_msg.write(arduino_address, data_bytes)
+            bus.i2c_rdwr(msg)
+            print("Data sent successfully!")
+            
+            # Success - no need for more retries
+            return True
+            
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < retries - 1:
+                print(f"Waiting {timeout} seconds before retry...")
+                time.sleep(timeout)
+            else:
+                print("All retry attempts failed!")
+                raise Exception(f"Failed to write sequencer state after {retries} attempts") from e
+
 
 
 def I2Ccommunicate(state: SequencerState):
