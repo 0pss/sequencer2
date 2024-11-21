@@ -129,7 +129,6 @@ def read_bpm(bus, arduino_address, state: SequencerState):
     except Exception as e:
         print(f"Error in I2C (reading BPM): {e}")
 
-
 def read_mprs(bus, state, edge_detector):
     mpr121_addresses = [0x5A, 0x5B]
     TOUCH_STATUS_REG = 0x00
@@ -163,6 +162,25 @@ def read_mprs(bus, state, edge_detector):
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
 
+def send_array(bus, arduino_address, state):
+    """
+    Sends a 4x16 sequencer states array to Arduino via I2C.
+    :param sequencer_on: List of Arrays representing a 4x16 boolean grid
+    """
+    try:
+        # Convert `sequencer_on` to a list of bytes
+        data = []
+        for row in state.sequencer_on:
+            byte1 = sum((1 << i) for i, val in enumerate(row[:8]) if val)
+            byte2 = sum((1 << i) for i, val in enumerate(row[8:]) if val)
+            data.extend([byte1, byte2])  # Each row becomes 2 bytes
+
+        # Send the data
+        print(f"Sending data: {data}")
+        bus.write_i2c_block_data(arduino_address, 0x02, data)
+    except Exception as e:
+        print(f"I2C write error (sequencer states): {e}")
+
 
 def I2Ccommunicate(state: SequencerState):
 
@@ -183,8 +201,8 @@ def I2Ccommunicate(state: SequencerState):
         read_bpm(bus, arduino_address, state)
         sleep(0.01)
         #send LED array
-        #send_array(bus, arduino_address, state)
-        #sleep(0.01)
+        send_array(bus, arduino_address, state)
+        sleep(0.01)
 
 def i2c_with_realtime_priority(state: SequencerState):
     process = psutil.Process(os.getpid())
