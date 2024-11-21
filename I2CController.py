@@ -124,7 +124,7 @@ def init(state: SequencerState):
 
 def send_position(bus, arduino_address, state: SequencerState):
     try:
-        position = state.sequencer_global_step.value
+        position = state.sequencer_global_step.value -1 #stupid fix :(
         data = position & 0x3F
         #print(f"sending position: {position} and data: {data}")
         bus.write_i2c_block_data(arduino_address, 0x01, [data])
@@ -190,8 +190,8 @@ def read_mprs_debug(bus, state, edge_detector):
 
     try:
         # Read touch statuses from both sensors
-        status1 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
-        status2 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
+        status1 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
+        status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
 
 
         i = 0
