@@ -158,7 +158,6 @@ def read_mprs(bus, state, edge_detector):
         status1 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
 
-        print("HERE", status1, status2)
 
         # Map last 4 outputs of Sensor 2 to rows 1-4 in column 11
         for i in range(4):  # i corresponds to rows 1–4
@@ -194,7 +193,6 @@ def read_mprs_debug(bus, state, edge_detector):
         status1 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
 
-        print("HERE", status1, status2)
 
         i = 0
         # Sensor 1: Map columns 0-11 for the active row
@@ -252,7 +250,6 @@ def send_array(bus, arduino_address, state):
             data_bytes.append(byte2)
                     
         # Create and send write message
-        print("Sending data...")
         msg = i2c_msg.write(arduino_address, data_bytes)
         bus.i2c_rdwr(msg)
         
