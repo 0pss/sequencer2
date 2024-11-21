@@ -139,6 +139,8 @@ def read_mprs(bus, state, edge_detector):
         status1 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
 
+        print("HERE")
+
         # Map last 4 outputs of Sensor 2 to rows 1-4 in column 11
         for i in range(4):  # i corresponds to rows 1–4
             row_active = bool(status2 & (1 << (i + 8)))  # Check bits 8–11 of status2
@@ -174,68 +176,38 @@ def send_array(bus, arduino_address, state, retries=3, timeout=1.0):
         retries: Number of retry attempts
         timeout: Timeout in seconds for each attempt
     """
-    for attempt in range(retries):
-        try:
-            print(f"\nAttempt {attempt + 1} of {retries}")
+    try:
+    
+        # Start with command byte for sequencer states (0x02)
+        data_bytes = bytearray([0x02])
+        
+        # Pack each row into 2 bytes (16 bits)
+        for row_idx, row in enumerate(state.sequencer_on):
+            byte1 = 0  # First 8 bits
+            byte2 = 0  # Second 8 bits
             
-            # Check if device is responding
-            print(f"Checking if device 0x{arduino_address:02x} is available...")
-            try:
-                bus.read_byte(arduino_address)
-                print("Device is responding!")
-            except Exception as e:
-                print(f"Device check failed: {e}")
-                # List available I2C devices
-                print("\nScanning I2C bus for available devices...")
-                for addr in range(0x03, 0x78):
-                    try:
-                        bus.read_byte(addr)
-                        print(f"Found device at address: 0x{addr:02x}")
-                    except:
-                        pass
-                raise Exception("Device not responding")
-
-            # Start with command byte for sequencer states (0x02)
-            data_bytes = bytearray([0x02])
+            # Pack first 8 bits
+            for i in range(8):
+                if row[i]:
+                    byte1 |= (1 << i)
             
-            # Pack each row into 2 bytes (16 bits)
-            for row_idx, row in enumerate(state.sequencer_on):
-                byte1 = 0  # First 8 bits
-                byte2 = 0  # Second 8 bits
-                
-                # Pack first 8 bits
-                for i in range(8):
-                    if row[i]:
-                        byte1 |= (1 << i)
-                
-                # Pack second 8 bits
-                for i in range(8):
-                    if row[i + 8]:
-                        byte2 |= (1 << i)
-                
-                data_bytes.append(byte1)
-                data_bytes.append(byte2)
-                print(f"Row {row_idx}: byte1=0x{byte1:02x}, byte2=0x{byte2:02x}")
+            # Pack second 8 bits
+            for i in range(8):
+                if row[i + 8]:
+                    byte2 |= (1 << i)
             
-            print(f"Complete data packet: {' '.join([f'0x{x:02x}' for x in data_bytes])}")
-            
-            # Create and send write message
-            print("Sending data...")
-            msg = i2c_msg.write(arduino_address, data_bytes)
-            bus.i2c_rdwr(msg)
-            print("Data sent successfully!")
-            
-            # Success - no need for more retries
-            return True
-            
-        except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {e}")
-            if attempt < retries - 1:
-                print(f"Waiting {timeout} seconds before retry...")
-                time.sleep(timeout)
-            else:
-                print("All retry attempts failed!")
-                raise Exception(f"Failed to write sequencer state after {retries} attempts") from e
+            data_bytes.append(byte1)
+            data_bytes.append(byte2)
+                    
+        # Create and send write message
+        print("Sending data...")
+        msg = i2c_msg.write(arduino_address, data_bytes)
+        bus.i2c_rdwr(msg)
+        
+        
+    except Exception as e:
+        print(f"Attempt failed: {e}")
+        
 
 
 
