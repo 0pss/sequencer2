@@ -114,11 +114,9 @@ def init(state: SequencerState):
             # Enable all electrodes
             bus.write_byte_data(address, 0x5E, 0x8F)  # Run mode, all 12 electrodes enabled
             
-            return True
             
         except Exception as e:
             print(f"Error initializing MPR121 at address 0x{address:02X}: {str(e)}")
-            return False
 
     print("DONE INIT MPR121")
 
