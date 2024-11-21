@@ -183,14 +183,6 @@ def read_mprs(bus, state, edge_detector):
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
 
-# Helper function to reverse the bits in a 16-bit integer
-def reverse_bits_16bit(num):
-    reversed_num = 0
-    for _ in range(16):  # Process 16 bits
-        reversed_num = (reversed_num << 1) | (num & 1)  # Append LSB to reversed_num
-        num >>= 1  # Shift the input number to the right
-    return reversed_num
-
 def read_mprs_debug(bus, state, edge_detector):
     mpr121_addresses = [0x5A, 0x5B]
     TOUCH_STATUS_REG = 0x00
@@ -200,10 +192,6 @@ def read_mprs_debug(bus, state, edge_detector):
         # Read touch statuses from both sensors
         status1 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
-
-        # Reverse the bit order for both statuses
-        status1 = reverse_bits_16bit(status1)
-        status2 = reverse_bits_16bit(status2)
 
         i = 0
         # Sensor 1: Map columns 0-11 for the active row
