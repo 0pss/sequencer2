@@ -194,6 +194,7 @@ def reverse_bits_16bit(num):
 def read_mprs_debug(bus, state, edge_detector):
     mpr121_addresses = [0x5A, 0x5B]
     TOUCH_STATUS_REG = 0x00
+    bit_to_output = {i: 11 - i for i in range(12)}  # Reverse mapping for bits 0 to 11
 
     try:
         # Read touch statuses from both sensors
@@ -210,8 +211,9 @@ def read_mprs_debug(bus, state, edge_detector):
             touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
             edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
             if edge == "rising":
-                state.sequencer_on[i][j] ^= 1  # Toggle on rising edge
-                state.sequencer_changed[j] = 1
+                col = bit_to_output[j]
+                state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
+                state.sequencer_changed[col] = 1
 
         # Sensor 2: Map columns 12–15 for the active row
         for j in range(4):  # j corresponds to columns 12–15
