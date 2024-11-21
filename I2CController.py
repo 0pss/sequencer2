@@ -208,8 +208,9 @@ def read_mprs_debug(bus, state, edge_detector):
             touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
             edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
             if edge == "rising":
-                state.sequencer_on[i][j + 12] ^= 1  # Toggle on rising edge
-                state.sequencer_changed[j+12] = 1
+                col = bit_to_output[j]
+                state.sequencer_on[i][col + 12] ^= 1  # Toggle on rising edge
+                state.sequencer_changed[col+12] = 1
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
