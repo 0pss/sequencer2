@@ -209,8 +209,8 @@ def I2Ccommunicate(state: SequencerState):
 
     while True:
         # send position
-        send_position(bus, arduino_address, state)
-        sleep(0.01)
+        #send_position(bus, arduino_address, state)
+        #sleep(0.01)
         # Read Touch
         read_mprs(bus, state, debouncer)
         sleep(0.01)
