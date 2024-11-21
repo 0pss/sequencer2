@@ -81,43 +81,43 @@ def init(state: SequencerState):
 
     for address in mpr121_addresses:
         try:
-            bus.write_byte_data(mpr121_addresses, 0x80, 0x63)
+            bus.write_byte_data(address, 0x80, 0x63)
             time.sleep(0.1)
             
             # Stop mode
-            bus.write_byte_data(mpr121_addresses, 0x5E, 0x00)
+            bus.write_byte_data(address, 0x5E, 0x00)
             
             # Configuration registers
-            bus.write_byte_data(mpr121_addresses, MHD_R, 0x01)
-            bus.write_byte_data(mpr121_addresses, NHD_R, 0x01)
-            bus.write_byte_data(mpr121_addresses, NCL_R, 0x00)
-            bus.write_byte_data(mpr121_addresses, FDL_R, 0x00)
+            bus.write_byte_data(address, MHD_R, 0x01)
+            bus.write_byte_data(address, NHD_R, 0x01)
+            bus.write_byte_data(address, NCL_R, 0x00)
+            bus.write_byte_data(address, FDL_R, 0x00)
             
             # Filter configuration
-            bus.write_byte_data(mpr121_addresses, MHD_F, 0x01)
-            bus.write_byte_data(mpr121_addresses, NHD_F, 0x01)
-            bus.write_byte_data(mpr121_addresses, NCL_F, 0xFF)
-            bus.write_byte_data(mpr121_addresses, FDL_F, 0x02)
+            bus.write_byte_data(address, MHD_F, 0x01)
+            bus.write_byte_data(address, NHD_F, 0x01)
+            bus.write_byte_data(address, NCL_F, 0xFF)
+            bus.write_byte_data(address, FDL_F, 0x02)
             
             # Touch and release thresholds
             for i in range(12):
-                bus.write_byte_data(mpr121_addresses, TTH + i*2, 40)  # Touch threshold
-                bus.write_byte_data(mpr121_addresses, RTH + i*2, 20)  # Release threshold
+                bus.write_byte_data(address, TTH + i*2, 40)  # Touch threshold
+                bus.write_byte_data(address, RTH + i*2, 20)  # Release threshold
             
             # Debounce configuration
-            bus.write_byte_data(mpr121_addresses, DEBOUNCE, 0x11)  # 2 samples for touch and release
+            bus.write_byte_data(address, DEBOUNCE, 0x11)  # 2 samples for touch and release
             
             # Auto configuration
-            bus.write_byte_data(mpr121_addresses, CONFIG1, 0x10)  # Default FFI of 6
-            bus.write_byte_data(mpr121_addresses, CONFIG2, 0x20)  # 0.5uS encoding, 1ms period
+            bus.write_byte_data(address, CONFIG1, 0x10)  # Default FFI of 6
+            bus.write_byte_data(address, CONFIG2, 0x20)  # 0.5uS encoding, 1ms period
             
             # Enable all electrodes
-            bus.write_byte_data(mpr121_addresses, 0x5E, 0x8F)  # Run mode, all 12 electrodes enabled
+            bus.write_byte_data(address, 0x5E, 0x8F)  # Run mode, all 12 electrodes enabled
             
             return True
             
         except Exception as e:
-            print(f"Error initializing MPR121 at address 0x{mpr121_addresses:02X}: {str(e)}")
+            print(f"Error initializing MPR121 at address 0x{address:02X}: {str(e)}")
             return False
 
     print("DONE INIT MPR121")
