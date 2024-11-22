@@ -194,7 +194,7 @@ def read_mprs_debug(bus, state, edge_detector):
         status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
 
         for i in range(4):  # i corresponds to rows 1–4
-            row_active = bool(status2 & (1 << (i + 8)))  # Check bits 8–11 of status2
+            row_active = bool(status2 & (1 << (i + 12)))  # Check bits 8–11 of status2
             print(i, row_active, status2)
             if row_active:  # Process only if row is active
                 # Sensor 1: Map columns 0-11 for the active row
