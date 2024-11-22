@@ -193,24 +193,27 @@ def read_mprs_debug(bus, state, edge_detector):
         status1 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
 
-        i = 0
-        # Sensor 1: Map columns 0-11 for the active row
-        for j in range(12):  # j corresponds to columns 0–11
-            touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
-            edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
-            if edge == "rising":
-                col = bit_to_output[j]
-                state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
-                state.sequencer_changed[col] = 1
+        for i in range(4):  # i corresponds to rows 1–4
+            row_active = bool(status2 & (1 << (i + 8)))  # Check bits 8–11 of status2
+            print(i, row_active, status2)
+            if row_active:  # Process only if row is active
+                # Sensor 1: Map columns 0-11 for the active row
+                for j in range(12):  # j corresponds to columns 0–11
+                    touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
+                    edge = edge_detector.debounce_and_detect_edge(i + 1, j, touch_data1)
+                    if edge == "rising":
+                        col = bit_to_output[j]
+                        state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
+                        state.sequencer_changed[col] = 1
 
-        # Sensor 2: Map columns 12–15 for the active row
-        for j in range(4):  # j corresponds to columns 12–15
-            touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
-            edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
-            if edge == "rising":
-                col = bit_to_output[j]
-                state.sequencer_on[i][col + 12] ^= 1  # Toggle on rising edge
-                state.sequencer_changed[col+12] = 1
+                # Sensor 2: Map columns 12–15 for the active row
+                for j in range(4):  # j corresponds to columns 12–15
+                    touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
+                    edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
+                    if edge == "rising":
+                        col = bit_to_output[j]
+                        state.sequencer_on[i][col + 12] ^= 1  # Toggle on rising edge
+                        state.sequencer_changed[col+12] = 1
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
