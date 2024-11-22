@@ -124,7 +124,7 @@ def init(state: SequencerState):
 
 def send_position(bus, arduino_address, state: SequencerState):
     try:
-        position = state.sequencer_global_step.value
+        position = (state.sequencer_global_step.value +15) % 16 #TODO: Stupid fix for one-off error
         data = position & 0x3F
         #print(f"sending position: {position} and data: {data}")
         bus.write_i2c_block_data(arduino_address, 0x01, [data])
