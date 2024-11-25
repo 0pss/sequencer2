@@ -192,6 +192,7 @@ def read_mprs_debug(bus, state, edge_detector):
     bit_to_output2 = {i: 23 - i for i in range(4, 12)}  # Reverse mapping for bits 0 to 11
 
     try:
+        print("_________________________________")
         # Read touch statuses from both sensors
         status1 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
@@ -211,7 +212,7 @@ def read_mprs_debug(bus, state, edge_detector):
                 # Sensor 2: Map columns 12–15 for the active row
                 for j in range(4):  # j corresponds to columns 12–15
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
-                    print("edge:", j+12)
+                    print("edge:", i, j+12)
                     edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
                     print("after edge", edge)
                     if edge == "rising":
@@ -222,6 +223,7 @@ def read_mprs_debug(bus, state, edge_detector):
                         state.sequencer_changed[col] = 1
 
                 for j in [5,6,7,8]:
+                    print("--------")
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
                     edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
                     if edge == "rising":
