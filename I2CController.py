@@ -214,7 +214,6 @@ def read_mprs_debug(bus, state, edge_detector):
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
                     print(i,j,touch_data2)
                     if touch_data2:
-                        print("col: ", col)
                         col = bit_to_output2[j]
                         print(i,col, "AAAHHHHS")
                         state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
