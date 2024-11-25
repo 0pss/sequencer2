@@ -13,9 +13,9 @@ import ctypes
 class InputEdgeDetector:
     def __init__(self, debounce_threshold=3):
         self.debounce_threshold = debounce_threshold
-        self.touch_buffer = [[0] * 16 for _ in range(4)]  # Tracks stable states
-        self.touch_counters = [[0] * 16 for _ in range(4)]  # Stability counters
-        self.previous_state = [[0] * 16 for _ in range(4)]  # Tracks previous stable states
+        self.touch_buffer = [[0] * 20 for _ in range(4)]  # Tracks stable states
+        self.touch_counters = [[0] * 20 for _ in range(4)]  # Stability counters
+        self.previous_state = [[0] * 20 for _ in range(4)]  # Tracks previous stable states
 
     def debounce_and_detect_edge(self, row, col, current_state):
         """
@@ -124,9 +124,12 @@ def init(state: SequencerState):
 
 def send_position(bus, arduino_address, state: SequencerState):
     try:
-        position = (state.sequencer_global_step.value +15) % 16 #TODO: Stupid fix for one-off error
+        if not state.live_mode:
+            position = (state.sequencer_global_step.value +15) % 16 #TODO: Stupid fix for one-off error
+            #print(f"sending position: {position} and data: {data}")
+        else:
+            position = 15
         data = position & 0x3F
-        #print(f"sending position: {position} and data: {data}")
         bus.write_i2c_block_data(arduino_address, 0x01, [data])
     except Exception as e:
         print(f"I2C write error (position): {e}")
@@ -179,6 +182,7 @@ def read_mprs(bus, state, edge_detector):
                     if edge == "rising":
                         state.sequencer_on[i][j + 12] ^= 1  # Toggle on rising edge
                         state.sequencer_changed[j+12] = 1
+                
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
@@ -195,7 +199,6 @@ def read_mprs_debug(bus, state, edge_detector):
 
         for i in range(4):  # i corresponds to rows 1–4
             row_active = bool(status2 & (1 << (i)))  # Check bits 8–11 of status2
-            print(i, row_active, status2)
             if row_active:  # Process only if row is active
                 # Sensor 1: Map columns 0-11 for the active row
                 for j in range(12):  # j corresponds to columns 0–11
@@ -214,6 +217,15 @@ def read_mprs_debug(bus, state, edge_detector):
                         col = bit_to_output[j]
                         state.sequencer_on[i][col + 12] ^= 1  # Toggle on rising edge
                         state.sequencer_changed[col+12] = 1
+
+                for j in [5,6,7,8]:
+                    touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
+                    edge = edge_detector.debounce_and_detect_edge(i + 1, j + 12, touch_data2)
+                    if edge == "rising":
+                        col = bit_to_output[j]
+                        
+                    
+                        print(j,col, "<<<<<< LIVE MODE BEBE")
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")

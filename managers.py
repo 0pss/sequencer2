@@ -15,6 +15,7 @@ class SequencerState:
         self.sequencer_global_step = Value('i', 0)
         self.bpm = Value('i', 120)
         self.stopped = Value('b', False)  # boolean
+        self.live_mode = Value('b', False)  # Default to False
         
         # Create 4x16 grid of sequencer states
         # Use a list of Arrays for sequencer_on without Manager
