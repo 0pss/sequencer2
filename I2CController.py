@@ -189,6 +189,7 @@ def read_mprs_debug(bus, state, edge_detector):
     mpr121_addresses = [0x5A, 0x5B]
     TOUCH_STATUS_REG = 0x00
     bit_to_output = {i: 11 - i for i in range(12)}  # Reverse mapping for bits 0 to 11
+    bit_to_output2 = {i: 23 - i for i in range(4, 12)}  # Reverse mapping for bits 0 to 11
 
     try:
         # Read touch statuses from both sensors
@@ -212,18 +213,18 @@ def read_mprs_debug(bus, state, edge_detector):
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
                     edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
                     if edge == "rising":
-                        col = bit_to_output[j]
-                        state.sequencer_on[i][col + 12] ^= 1  # Toggle on rising edge
-                        state.sequencer_changed[col+12] = 1
+                        print("col: ", col)
+                        col = bit_to_output2[j]
+                        state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
+                        state.sequencer_changed[col] = 1
 
                 for j in [5,6,7,8]:
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
                     edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
                     if edge == "rising":
-                        col = bit_to_output[j]
                         
                     
-                        print(j,col, "<<<<<< LIVE MODE BEBE")
+                        print(j, "<<<<<< LIVE MODE BEBE")
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
