@@ -102,7 +102,7 @@ def init(state: SequencerState):
             # Touch and release thresholds
             for i in range(12):
                 bus.write_byte_data(address, TTH + i*2, 20)  # Touch threshold
-                bus.write_byte_data(address, RTH + i*2, 10)  # Release threshold
+                bus.write_byte_data(address, RTH + i*2, 15)  # Release threshold
             
             # Debounce configuration
             bus.write_byte_data(address, DEBOUNCE, 0x11)  # 2 samples for touch and release
