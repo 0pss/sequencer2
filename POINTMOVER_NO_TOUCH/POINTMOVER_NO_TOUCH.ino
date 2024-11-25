@@ -14,6 +14,8 @@ Encoder myEnc(2, 3);
 long oldPosition  = -999;
 long newPosition = 0;
 
+bool sequencer_on[4][16];
+
 // Rest of the declarations remain the same
 CRGB leds[NUM_LEDS];
 
@@ -58,11 +60,6 @@ void addToTick(uint32_t newTick, void (*newTask)()) {
     }
 }
 
-void readEncoder() {
-
-}
-
-
 void serviceEncoder(){
     newPosition = myEnc.read()/4;
 }
@@ -71,15 +68,29 @@ void serviceEncoder(){
 void update_leds() {
     FastLED.clear();
     
-    // First layer: Set all direct-controlled LEDs (from command 0x03)
-    for (int byte_index = 0; byte_index < 10; byte_index++) {
-        byte led_states = led_control_state.led_states[byte_index];
-        for (int bit_index = 0; bit_index < 8; bit_index++) {
-            int led_index = byte_index * 8 + bit_index;
-            if (led_index < NUM_LEDS) {
-                bool led_on = (led_states & (1 << bit_index)) != 0;
-                if (led_on) {
-                    leds[led_index] = CRGB(255, 255, 0);
+    // First layer: Set LEDs based on sequencer states
+    for (int row = 0; row < 4; row++) {
+        Track& track = tracks[row];
+        
+        // Calculate the number of usable positions in this track
+        int track_length = (abs(track.stop - track.start) / 2) + 1;
+        
+        // Map each sequencer column to a physical LED position
+        for (int col = 0; col < 16; col++) {
+            if (sequencer_on[row][col]) {
+                // Calculate physical LED position based on track direction and start
+                int led_index;
+                if (track.direction > 0) {
+                    // For positive direction tracks, start from left
+                    led_index = track.start + (col * 2);  // Skip every other LED
+                } else {
+                    // For negative direction tracks, start from right
+                    led_index = track.stop - (col * 2);   // Skip every other LED
+                }
+                
+                // Only set LED if it's within the track's bounds
+                if (led_index >= track.start && led_index <= track.stop) {
+                    leds[led_index] = CRGB(0, 80, 255);  // Red-orange for sequencer
                 }
             }
         }
@@ -92,7 +103,7 @@ void update_leds() {
         } else {
             tracks[i].position = tracks[i].start + tracks[i].direction * led_control_state.animation_position;
         }
-        leds[tracks[i].position] = CRGB(255, 255, 0);
+        leds[tracks[i].position] = CRGB(255, 255, 0);  // Yellow color for animation
         
         if (tracks[i].position > tracks[i].stop) {
             tracks[i].position = tracks[i].start;
@@ -132,27 +143,98 @@ void loop() {
     }
 
     // Re-schedule sensor and encoder reads
-        addToTick(millis() + 49, serviceEncoder);
+    addToTick(millis() + 49, serviceEncoder);
     addToTick(millis() + 250, update_leds);
 
     delay(10); // Small delay to avoid busy-waiting
 }
 
 void receiveEvent(int howMany) {
-    if (howMany < 2) return;
-
-    Serial.println("Command recieved");
-
-    byte command = Wire.read();
-    byte data = Wire.read();
-
+    Serial.print("Received bytes: ");
+    Serial.println(howMany);
+    
+    // Print all received bytes in hex format
+    Serial.print("Raw data: ");
+    for(int i = 0; i < howMany; i++) {
+        byte data = Wire.peek();
+        Serial.print("0x");
+        if(data < 16) Serial.print("0");  // Add leading zero for single digit hex
+        Serial.print(data, HEX);
+        Serial.print(" ");
+    }
+    Serial.println();
+        
+    if (howMany < 1) {
+        Serial.println("Error: No data received");
+        return;
+    }
+    
+    byte command = Wire.peek();  // Look at first byte without removing it
+    Serial.print("Command byte: 0x");
+    Serial.println(command, HEX);
+    
+    // Process based on first byte
     if (command == 0x01) {
-        led_control_state.animation_position = data;
-        update_leds();
-
+        Serial.println("Animation position command received");
+        Wire.read();  // Remove command byte
+        if (Wire.available()) {
+            led_control_state.animation_position = Wire.read();
+            Serial.print("New animation position: ");
+            Serial.println(led_control_state.animation_position);
+            update_leds();
+        }
+    }
+    else if (command == 0x02) {
+        Serial.println("Sequencer state command received");
+        Wire.read();  // Remove command byte
         
-        
-    } 
+        if (Wire.available() >= 8) {  // Check if we have enough data
+            Serial.println("Reading sequencer states...");
+            for (int row = 0; row < 4; row++) {
+                byte byte1 = Wire.read();
+                byte byte2 = Wire.read();
+                
+                Serial.print("Row ");
+                Serial.print(row);
+                Serial.print(" bytes: 0x");
+                Serial.print(byte1, HEX);
+                Serial.print(" 0x");
+                Serial.println(byte2, HEX);
+                
+                // Fill the row with the bits from the two bytes
+                for (int col = 0; col < 8; col++) {
+                    sequencer_on[row][col] = (byte1 >> col) & 1;
+                    sequencer_on[row][col + 8] = (byte2 >> col) & 1;
+                }
+            }
+            
+            // Print the resulting grid
+            Serial.println("Resulting sequencer grid:");
+            for (int row = 0; row < 4; row++) {
+                Serial.print("Row ");
+                Serial.print(row);
+                Serial.print(": ");
+                for (int col = 0; col < 16; col++) {
+                    Serial.print(sequencer_on[row][col]);
+                    Serial.print(" ");
+                }
+                Serial.println();
+            }
+        } else {
+            Serial.print("Error: Expected 8 bytes of data, but only ");
+            Serial.print(Wire.available());
+            Serial.println(" bytes available");
+        }
+    }
+    else {
+        Serial.print("Unknown command received: 0x");
+        Serial.println(command, HEX);
+        // Flush remaining bytes
+        while(Wire.available()) {
+            Wire.read();
+        }
+    }
+    
 }
 
 void requestEvent() {
