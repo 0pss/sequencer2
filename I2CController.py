@@ -217,6 +217,7 @@ def read_mprs_debug(bus, state, edge_detector):
                     if edge == "rising":
                         print("col: ", col)
                         col = bit_to_output2[j]
+                        print(i,col, "AAAHHHHS")
                         state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
                         state.sequencer_changed[col] = 1
 
