@@ -20,7 +20,7 @@ class SequencerState:
         # Create 4x16 grid of sequencer states
         # Use a list of Arrays for sequencer_on without Manager
         self.sequencer_on = [
-            Array('i', [1] * 16),  # First row, all on
+            Array('i', [0] * 16),  # First row, all on
             *[Array('i', [0] * 16) for _ in range(3)]  # Other rows, all off
         ]
         
