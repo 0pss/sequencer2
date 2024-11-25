@@ -213,7 +213,7 @@ def read_mprs_debug(bus, state, edge_detector):
                     touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
                     print("edge:", j+12)
                     edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
-                    print("after edge")
+                    print("after edge", edge)
                     if edge == "rising":
                         print("col: ", col)
                         col = bit_to_output2[j]
