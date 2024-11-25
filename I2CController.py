@@ -211,9 +211,10 @@ def read_mprs_debug(bus, state, edge_detector):
 
                 # Sensor 2: Map columns 12–15 for the active row
                 for j, bit in enumerate([11, 10, 9, 8, 7, 6, 5, 4]):  # j corresponds to columns 12–15
-                    touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
+                    touch_data2 = bool(status2 & (1 << bit))  # Check bits 0–3 of status2
                     print(i,j,bit, touch_data2)
                     if touch_data2:
+                        col = 12+j
                         print(i,col, "AAAHHHHS")
                         state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
                         state.sequencer_changed[col] = 1
