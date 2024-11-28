@@ -197,8 +197,8 @@ def read_mprs_debug(bus, state, edge_detector):
         status1 = bus.read_word_data(mpr121_addresses[1], TOUCH_STATUS_REG)
         status2 = bus.read_word_data(mpr121_addresses[0], TOUCH_STATUS_REG)
         print(status1, status2)
-        for i in range(4):  # i corresponds to rows 1–4
-            row_active = bool(status2 & (1 << (i)))  # Check bits 8–11 of status2
+        for i, bit in enumerate([8,9,10,11]):  # j corresponds to columns 12–15
+            row_active = bool(status2 & (1 << (bit)))  # Check bits 8–11 of status2
             if row_active:  # Process only if row is active
                 # Sensor 1: Map columns 0-11 for the active row
                 for j in range(12):  # j corresponds to columns 0–11
@@ -210,7 +210,7 @@ def read_mprs_debug(bus, state, edge_detector):
                         state.sequencer_changed[col] = 1
 
                 # Sensor 2: Map columns 12–15 for the active row
-                for j, bit in enumerate([11, 10, 9, 8, 7, 6, 5, 4]):  # j corresponds to columns 12–15
+                for j, bit in enumerate([0,1,2,3,4,5,6,7]):  # j corresponds to columns 12–15
                     touch_data2 = bool(status2 & (1 << bit))  # Check bits 0–3 of status2
                     print(i,j,bit, touch_data2)
                     if touch_data2:
@@ -219,14 +219,14 @@ def read_mprs_debug(bus, state, edge_detector):
                         state.sequencer_on[i][col] ^= 1  # Toggle on rising edge
                         state.sequencer_changed[col] = 1
 
-                for j in [5,6,7,8]:
-                    print("--------")
-                    touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
-                    edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
-                    if edge == "rising":
+                #for j in [5,6,7,8]:
+                 #   print("--------")
+                  #  touch_data2 = bool(status2 & (1 << j))  # Check bits 0–3 of status2
+                   # edge = edge_detector.debounce_and_detect_edge(i, j + 12, touch_data2)
+                    #if edge == "rising":
                         
                     
-                        print(j, "<<<<<< LIVE MODE BEBE")
+                     #   print(j, "<<<<<< LIVE MODE BEBE")
 
     except Exception as e:
         print(f"Error in I2C (reading MPR): {e}")
