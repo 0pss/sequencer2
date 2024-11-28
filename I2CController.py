@@ -201,8 +201,8 @@ def read_mprs_debug(bus, state, edge_detector):
             row_active = bool(status2 & (1 << (bit)))  # Check bits 8–11 of status2
             if row_active:  # Process only if row is active
                 # Sensor 1: Map columns 0-11 for the active row
-                for j in range(12):  # j corresponds to columns 0–11
-                    touch_data1 = bool(status1 & (1 << j))  # Check bits 0–11 of status1
+                for j, bit in enumerate([7,6,5,4,3,2,1,0]):  # j corresponds to columns 12–15
+                    touch_data1 = bool(status1 & (1 << bit))  # Check bits 0–11 of status1
                     edge = edge_detector.debounce_and_detect_edge(i, j, touch_data1)
                     if edge == "rising":
                         col = bit_to_output[j]
